@@ -27,6 +27,12 @@ MPCController::MPCController(double dt, double L, int pred_horizon,
     data_->q = nullptr;
     data_->l = nullptr;
     data_->u = nullptr;
+
+    // 初始化一个空的QP问题
+    Eigen::Vector3d init_state = Eigen::Vector3d::Zero();
+    std::vector<Eigen::Vector2d> init_path;
+    init_path.push_back(Eigen::Vector2d::Zero());
+    setupQPProblem(init_state, init_path);
 }
 
 void MPCController::linearizeModel(const Eigen::Vector3d& state,
@@ -55,11 +61,6 @@ void MPCController::linearizeModel(const Eigen::Vector3d& state,
 bool MPCController::solve(const Eigen::Vector3d& current_state,
                          const std::vector<Eigen::Vector2d>& ref_path,
                          double& steer, double& speed) {
-    if (workspace_ == nullptr) {
-        std::cout << "Error: OSQP workspace not initialized!" << std::endl;
-        return false;
-    }
-
     setupQPProblem(current_state, ref_path);
     
     if (workspace_ == nullptr) {
