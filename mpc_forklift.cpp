@@ -11,13 +11,13 @@ MPCController::MPCController(double dt, double L, int pred_horizon,
     
     // 初始化权重矩阵
     Q_ = Eigen::MatrixXd::Identity(3, 3);
-    Q_(0,0) = 100.0;   // 增加位置跟踪权重
-    Q_(1,1) = 100.0;
-    Q_(2,2) = 200.0;   // 进一步增加航向角权重
+    Q_(0,0) = 10.0;    // 降低位置权重，使运动更平滑
+    Q_(1,1) = 10.0;
+    Q_(2,2) = 50.0;    // 保持适度的航向角权重
     
     R_ = Eigen::MatrixXd::Identity(2, 2);
-    R_(0,0) = 0.1;    // 降低转向权重，使转向更灵活
-    R_(1,1) = 0.1;    // 降低速度权重，使速度更灵活
+    R_(0,0) = 1.0;    // 增加转向权重，防止剧烈转向
+    R_(1,1) = 0.1;    // 保持较小的速度权重
     
     // 初始化OSQP数据
     data_->n = 0;
@@ -113,71 +113,105 @@ void MPCController::setupQPProblem(const Eigen::Vector3d& current_state,
     int nu = 2;  // 控制维度
     int N = pred_horizon_;
     
-    int n_variables = nu * N;  // 只优化控制输入
-    int n_constraints = nu * N;  // 控制约束
+    int n_variables = nx * N + nu * N;  // 状态和控制变量
+    int n_constraints = nx * (N + 1);   // 动力学约束和控制约束
     
-    // 初始化矩阵
+    // 初始化矩阵维度
     data_.get()->n = n_variables;
     data_.get()->m = n_constraints;
+    
+    std::cout << "Problem dimensions: " << std::endl;
+    std::cout << "n_variables: " << n_variables << std::endl;
+    std::cout << "n_constraints: " << n_constraints << std::endl;
+    
+    // 获取线性化系统矩阵
+    Eigen::Vector2d nominal_input(0, 0);
+    Eigen::MatrixXd Ad, Bd;
+    linearizeModel(current_state, nominal_input, Ad, Bd);
+    std::cout << "Ad matrix: \n" << Ad << std::endl;
+    std::cout << "Bd matrix: \n" << Bd << std::endl;
     
     // 构建目标函数矩阵 P
     Eigen::MatrixXd P_eigen = Eigen::MatrixXd::Zero(n_variables, n_variables);
     for (int i = 0; i < N; i++) {
-        P_eigen.block(i*nu, i*nu, nu, nu) = R_;  // 只有控制代价
+        // 状态代价
+        P_eigen.block(i*nx, i*nx, nx, nx) = Q_;
+        // 控制代价
+        P_eigen.block(N*nx + i*nu, N*nx + i*nu, nu, nu) = R_;
     }
     
-    // 确保P是对称的
+    // 确保P是对称的并且正定
     P_eigen = (P_eigen + P_eigen.transpose()) * 0.5;
-    
-    // 构建线性项 q
-    Eigen::VectorXd q_eigen = Eigen::VectorXd::Zero(n_variables);
-    // 设置期望的控制输入
-    for (int i = 0; i < N; i++) {
-        if (i < ref_path.size()) {
-            // 计算期望的控制输入
-            double dx = ref_path[i].x() - current_state[0];
-            double dy = ref_path[i].y() - current_state[1];
-            double desired_theta = atan2(dy, dx);
-            double current_theta = current_state[2];
-            
-            // 计算航向误差（考虑角度的周期性）
-            double theta_error = desired_theta - current_theta;
-            while (theta_error > M_PI) theta_error -= 2*M_PI;
-            while (theta_error < -M_PI) theta_error += 2*M_PI;
-            
-            // 计算到参考点的距离
-            double distance = std::sqrt(dx*dx + dy*dy);
-            
-            // 设置期望的转向角和速度
-            q_eigen(i*nu) = -theta_error;    // 使用航向误差
-            // 根据距离和航向误差动态调整速度
-            double speed_factor = std::max(0.5, std::min(1.0, 1.0 - std::abs(theta_error)/(M_PI/2)));
-            double target_speed = std::min(max_speed_ * 0.7, std::max(0.3, distance));
-            q_eigen(i*nu + 1) = -speed_factor * target_speed;
-        }
-    }
+    // 增加对角线项以确保正定性
+    P_eigen.diagonal().array() += 1e-3;
     
     // 构建约束矩阵 A
-    Eigen::MatrixXd A_eigen = Eigen::MatrixXd::Identity(n_constraints, n_variables);
+    Eigen::MatrixXd A_eigen = Eigen::MatrixXd::Zero(n_constraints, n_variables);
+    
+    // 设置动力学约束
+    for (int i = 0; i < N; i++) {
+        // 当前状态
+        A_eigen.block(i*nx, i*nx, nx, nx) = Ad;
+        // 下一个状态
+        if (i < N-1) {
+            A_eigen.block(i*nx, (i+1)*nx, nx, nx) = -Eigen::MatrixXd::Identity(nx, nx);
+        }
+        // 控制输入影响
+        A_eigen.block(i*nx, N*nx + i*nu, nx, nu) = Bd;
+    }
+    
+    // 打印A矩阵的一部分用于调试
+    std::cout << "A matrix block (0,0): \n" << A_eigen.block(0, 0, nx, nx) << std::endl;
+    std::cout << "A matrix block (0,N*nx): \n" << A_eigen.block(0, N*nx, nx, nu) << std::endl;
     
     // 设置约束上下界
     Eigen::VectorXd l_eigen = Eigen::VectorXd::Zero(n_constraints);
     Eigen::VectorXd u_eigen = Eigen::VectorXd::Zero(n_constraints);
     
-    // 设置控制约束
+    // 设置约束
     for (int i = 0; i < N; i++) {
-        // 转向角约束
-        l_eigen(i*nu) = -max_steer_;
-        u_eigen(i*nu) = max_steer_;
-        // 速度约束
-        l_eigen(i*nu + 1) = 0;
-        u_eigen(i*nu + 1) = max_speed_;
+        // 状态约束
+        if (i == 0) {
+            l_eigen.segment(i*nx, nx) = current_state;
+            u_eigen.segment(i*nx, nx) = current_state;
+        } else {
+            // 使用更合理的状态约束范围
+            l_eigen.segment(i*nx, nx) << -10.0, -10.0, -M_PI;  // x, y, theta
+            u_eigen.segment(i*nx, nx) << 10.0, 10.0, M_PI;
+        }
     }
-
+    
+    // 构建线性项 q
+    Eigen::VectorXd q_eigen = Eigen::VectorXd::Zero(n_variables);
+    for (int i = 0; i < N; i++) {
+        if (i < ref_path.size()) {
+            double dx = ref_path[i].x() - current_state[0];
+            double dy = ref_path[i].y() - current_state[1];
+            double desired_theta = atan2(dy, dx);
+            double current_theta = current_state[2];
+            
+            double theta_error = desired_theta - current_theta;
+            while (theta_error > M_PI) theta_error -= 2*M_PI;
+            while (theta_error < -M_PI) theta_error += 2*M_PI;
+            
+            double distance = std::sqrt(dx*dx + dy*dy);
+            
+            // 参考Apollo的目标设置
+            double target_speed = std::min(max_speed_, std::max(0.5, 2.0 * distance));
+            // 状态目标
+            q_eigen(i*nx) = -10.0 * dx;      // 增加x位置目标权重
+            q_eigen(i*nx + 1) = -10.0 * dy;  // 增加y位置目标权重
+            q_eigen(i*nx + 2) = -50.0 * theta_error;  // 增加航向角目标权重
+            // 控制目标
+            q_eigen(N*nx + i*nu) = 0;  // 转向目标保持为0
+            q_eigen(N*nx + i*nu + 1) = -5.0 * target_speed;  // 增加速度目标权重
+        }
+    }
+    
     // 转换P矩阵为CSC格式
-    std::vector<c_float> P_x;  // 非零元素
-    std::vector<c_int> P_i;    // 行索引
-    std::vector<c_int> P_p;    // 列指针
+    std::vector<c_float> P_x;
+    std::vector<c_int> P_i;
+    std::vector<c_int> P_p;
     P_p.push_back(0);
     
     for(int col = 0; col < n_variables; col++) {
@@ -188,6 +222,13 @@ void MPCController::setupQPProblem(const Eigen::Vector3d& current_state,
             }
         }
         P_p.push_back(P_i.size());
+    }
+    std::cout << "P matrix non-zeros: " << P_x.size() << std::endl;
+    
+    // 确保内存分配正确
+    if (P_x.empty() || P_i.empty() || P_p.empty()) {
+        std::cout << "Error: Empty P matrix!" << std::endl;
+        return;
     }
 
     // 转换A矩阵为CSC格式
@@ -205,11 +246,26 @@ void MPCController::setupQPProblem(const Eigen::Vector3d& current_state,
         }
         A_p.push_back(A_i.size());
     }
+    
+    // 确保内存分配正确
+    if (A_x.empty() || A_i.empty() || A_p.empty()) {
+        std::cout << "Error: Empty A matrix!" << std::endl;
+        return;
+    }
 
     // 分配OSQP数据内存
+    if (n_variables <= 0 || n_constraints <= 0) {
+        std::cout << "Error: Invalid problem dimensions!" << std::endl;
+        return;
+    }
     c_float* q = (c_float*)c_malloc(n_variables * sizeof(c_float));
     c_float* l = (c_float*)c_malloc(n_constraints * sizeof(c_float));
     c_float* u = (c_float*)c_malloc(n_constraints * sizeof(c_float));
+    
+    if (!q || !l || !u) {
+        std::cout << "Error: Memory allocation failed!" << std::endl;
+        return;
+    }
 
     // 复制向量数据
     for(int i = 0; i < n_variables; i++) {
@@ -221,12 +277,16 @@ void MPCController::setupQPProblem(const Eigen::Vector3d& current_state,
     }
 
     // 设置OSQP数据
+    std::cout << "Setting up OSQP data..." << std::endl;
     c_float* P_x_ptr = (c_float*)c_malloc(P_x.size() * sizeof(c_float));
     c_int* P_i_ptr = (c_int*)c_malloc(P_i.size() * sizeof(c_int));
     c_int* P_p_ptr = (c_int*)c_malloc(P_p.size() * sizeof(c_int));
+    std::cout << "Memory allocated for P matrix" << std::endl;
+    
     memcpy(P_x_ptr, P_x.data(), P_x.size() * sizeof(c_float));
     memcpy(P_i_ptr, P_i.data(), P_i.size() * sizeof(c_int));
     memcpy(P_p_ptr, P_p.data(), P_p.size() * sizeof(c_int));
+    std::cout << "Data copied for P matrix" << std::endl;
     data_.get()->P = csc_matrix(n_variables, n_variables, P_x.size(), P_x_ptr, P_i_ptr, P_p_ptr);
 
     c_float* A_x_ptr = (c_float*)c_malloc(A_x.size() * sizeof(c_float));
