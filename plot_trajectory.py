@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # 读取轨迹数据
-data = pd.read_csv('build/trajectory.csv')
+data = pd.read_csv('trajectory.csv')
 
 # 转换数据为numpy数组
 x = data['x'].to_numpy()

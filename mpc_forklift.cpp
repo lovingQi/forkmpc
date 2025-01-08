@@ -11,13 +11,13 @@ MPCController::MPCController(double dt, double L, int pred_horizon,
     
     // 初始化权重矩阵
     Q_ = Eigen::MatrixXd::Identity(3, 3);
-    Q_(0,0) = 100.0;
+    Q_(0,0) = 100.0;   // 增加位置跟踪权重
     Q_(1,1) = 100.0;
-    Q_(2,2) = 10.0;
+    Q_(2,2) = 200.0;   // 进一步增加航向角权重
     
     R_ = Eigen::MatrixXd::Identity(2, 2);
-    R_(0,0) = 1.0;
-    R_(1,1) = 1.0;
+    R_(0,0) = 0.1;    // 降低转向权重，使转向更灵活
+    R_(1,1) = 0.1;    // 降低速度权重，使速度更灵活
     
     // 初始化OSQP数据
     data_->n = 0;
@@ -123,8 +123,7 @@ void MPCController::setupQPProblem(const Eigen::Vector3d& current_state,
     // 构建目标函数矩阵 P
     Eigen::MatrixXd P_eigen = Eigen::MatrixXd::Zero(n_variables, n_variables);
     for (int i = 0; i < N; i++) {
-        // 控制代价
-        P_eigen.block(i*nu, i*nu, nu, nu) = R_ * 0.1;  // 降低控制代价权重
+        P_eigen.block(i*nu, i*nu, nu, nu) = R_;  // 只有控制代价
     }
     
     // 确保P是对称的
@@ -139,34 +138,42 @@ void MPCController::setupQPProblem(const Eigen::Vector3d& current_state,
             double dx = ref_path[i].x() - current_state[0];
             double dy = ref_path[i].y() - current_state[1];
             double desired_theta = atan2(dy, dx);
+            double current_theta = current_state[2];
+            
+            // 计算航向误差（考虑角度的周期性）
+            double theta_error = desired_theta - current_theta;
+            while (theta_error > M_PI) theta_error -= 2*M_PI;
+            while (theta_error < -M_PI) theta_error += 2*M_PI;
+            
+            // 计算到参考点的距离
+            double distance = std::sqrt(dx*dx + dy*dy);
             
             // 设置期望的转向角和速度
-            q_eigen(i*nu) = -desired_theta;  // 转向角
-            q_eigen(i*nu + 1) = -0.5;       // 期望速度
+            q_eigen(i*nu) = -theta_error;    // 使用航向误差
+            // 根据距离和航向误差动态调整速度
+            double speed_factor = std::max(0.5, std::min(1.0, 1.0 - std::abs(theta_error)/(M_PI/2)));
+            double target_speed = std::min(max_speed_ * 0.7, std::max(0.3, distance));
+            q_eigen(i*nu + 1) = -speed_factor * target_speed;
         }
     }
     
-    // 构建约束矩阵 A（包含系统动力学）
+    // 构建约束矩阵 A
     Eigen::MatrixXd A_eigen = Eigen::MatrixXd::Identity(n_constraints, n_variables);
     
     // 设置约束上下界
     Eigen::VectorXd l_eigen = Eigen::VectorXd::Zero(n_constraints);
     Eigen::VectorXd u_eigen = Eigen::VectorXd::Zero(n_constraints);
     
-    // 设置控制量约束
+    // 设置控制约束
     for (int i = 0; i < N; i++) {
         // 转向角约束
         l_eigen(i*nu) = -max_steer_;
         u_eigen(i*nu) = max_steer_;
         // 速度约束
-        l_eigen(i*nu + 1) = 0;  // 速度下限
+        l_eigen(i*nu + 1) = 0;
         u_eigen(i*nu + 1) = max_speed_;
     }
 
-    Eigen::Vector2d nominal_input(0, 0);  // 用于线性化的标称输入
-    Eigen::MatrixXd Ad, Bd;
-    linearizeModel(current_state, nominal_input, Ad, Bd);
-    
     // 转换P矩阵为CSC格式
     std::vector<c_float> P_x;  // 非零元素
     std::vector<c_int> P_i;    // 行索引
