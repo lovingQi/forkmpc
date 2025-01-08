@@ -1,5 +1,7 @@
 #pragma once
 
+#include <iostream>
+#define cerr cout  // 将所有cerr重定向到cout
 #include "Eigen/Dense"
 #include <vector>
 #include <memory>

@@ -1,5 +1,20 @@
 #include "mpc_forklift.h"
 #include <iostream>
+#include <cmath>
+#include <fstream>
+
+// 生成圆形参考路径
+std::vector<Eigen::Vector2d> generateCirclePath(double radius, int points) {
+    std::vector<Eigen::Vector2d> path;
+    for (int i = 0; i < points; ++i) {
+        double angle = 2.0 * M_PI * i / points;
+        path.push_back(Eigen::Vector2d(
+            radius * cos(angle),
+            radius * sin(angle)
+        ));
+    }
+    return path;
+}
 
 int main() {
     // 初始化MPC控制器
@@ -11,24 +26,43 @@ int main() {
     
     MPCController mpc(dt, L, pred_horizon, max_steer, max_speed);
     
-    // 当前状态
-    Eigen::Vector3d current_state(0, 0, 0);  // [x, y, theta]
+    // 生成圆形参考路径
+    double radius = 5.0;  // 5米半径
+    auto ref_path = generateCirclePath(radius, 100);
     
-    // 参考路径（示例：直线路径）
-    std::vector<Eigen::Vector2d> ref_path;
-    for (int i = 0; i < pred_horizon; ++i) {
-        ref_path.push_back(Eigen::Vector2d(i * dt, 0));
+    // 初始状态
+    Eigen::Vector3d state(radius, 0, 0);  // 从圆上的一点开始
+    
+    // 用于保存轨迹
+    std::ofstream trajectory_file("trajectory.csv");
+    trajectory_file << "x,y,theta,steer,speed\n";
+    
+    // 仿真循环
+    for (int i = 0; i < 200; ++i) {  // 模拟20秒
+        // 计算控制输入
+        double steer, speed;
+        if (mpc.solve(state, ref_path, steer, speed)) {
+            // 记录当前状态
+            trajectory_file << state[0] << "," << state[1] << "," 
+                          << state[2] << "," << steer << "," << speed << "\n";
+            
+            // 更新状态（简单运动学模型）
+            state[0] += speed * cos(state[2]) * cos(steer) * dt;
+            state[1] += speed * sin(state[2]) * cos(steer) * dt;
+            state[2] += speed * sin(steer) / L * dt;
+            
+            std::cout << "Time: " << i*dt << "s, "
+                     << "Position: (" << state[0] << ", " << state[1] << "), "
+                     << "Heading: " << state[2] << ", "
+                     << "Controls: [" << steer << ", " << speed << "]\n";
+        } else {
+            std::cout << "MPC求解失败！\n";
+            break;
+        }
     }
     
-    // 计算控制输入
-    double steer, speed;
-    if (mpc.solve(current_state, ref_path, steer, speed)) {
-        std::cout << "计算成功！" << std::endl;
-        std::cout << "转向角: " << steer << " rad" << std::endl;
-        std::cout << "速度: " << speed << " m/s" << std::endl;
-    } else {
-        std::cout << "MPC求解失败！" << std::endl;
-    }
+    trajectory_file.close();
+    std::cout << "轨迹已保存到trajectory.csv\n";
     
     return 0;
 } 

@@ -1,6 +1,7 @@
 #include "mpc_forklift.h"
 #include <cmath>
 #include <algorithm>
+#include <iostream>
 
 MPCController::MPCController(double dt, double L, int pred_horizon, 
                            double max_steer, double max_speed)
@@ -54,13 +55,25 @@ void MPCController::linearizeModel(const Eigen::Vector3d& state,
 bool MPCController::solve(const Eigen::Vector3d& current_state,
                          const std::vector<Eigen::Vector2d>& ref_path,
                          double& steer, double& speed) {
+    if (workspace_ == nullptr) {
+        std::cout << "Error: OSQP workspace not initialized!" << std::endl;
+        return false;
+    }
+
     setupQPProblem(current_state, ref_path);
+    
+    if (workspace_ == nullptr) {
+        std::cout << "Error: OSQP setup failed!" << std::endl;
+        return false;
+    }
     
     // 求解QP问题
     osqp_solve(workspace_.get());
     
     // 检查求解状态
     if (workspace_.get()->info->status_val != 1) {
+        std::cout << "OSQP solve failed with status: " 
+                  << workspace_.get()->info->status_val << std::endl;
         return false;
     }
     
@@ -73,6 +86,11 @@ bool MPCController::solve(const Eigen::Vector3d& current_state,
 
 void MPCController::setupQPProblem(const Eigen::Vector3d& current_state,
                                  const std::vector<Eigen::Vector2d>& ref_path) {
+    // 如果存在旧的工作空间，先清理
+    if (workspace_ != nullptr) {
+        workspace_.reset(nullptr);
+    }
+    
     // 清理旧的内存
     if (data_.get()->P) {
         c_free(data_.get()->P->x);
@@ -219,9 +237,6 @@ void MPCController::setupQPProblem(const Eigen::Vector3d& current_state,
     OSQPSettings* settings = (OSQPSettings *)c_malloc(sizeof(OSQPSettings));
     osqp_set_default_settings(settings);
 
-    if (workspace_ != nullptr) {
-        osqp_cleanup(workspace_.get());
-    }
     OSQPWorkspace* workspace_ptr = nullptr;
     osqp_setup(&workspace_ptr, data_.get(), settings);
     workspace_.reset(workspace_ptr);
