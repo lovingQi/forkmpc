@@ -104,7 +104,8 @@ void MPCController::setupQPProblem(const Eigen::Vector3d& current_state,
     // 构建目标函数矩阵 P
     Eigen::MatrixXd P_eigen = Eigen::MatrixXd::Zero(n_variables, n_variables);
     for (int i = 0; i < N; i++) {
-        P_eigen.block(i*nu, i*nu, nu, nu) = R_;
+        // 控制代价
+        P_eigen.block(i*nu, i*nu, nu, nu) = R_ * 0.1;  // 降低控制代价权重
     }
     
     // 确保P是对称的
@@ -112,11 +113,17 @@ void MPCController::setupQPProblem(const Eigen::Vector3d& current_state,
     
     // 构建线性项 q
     Eigen::VectorXd q_eigen = Eigen::VectorXd::Zero(n_variables);
+    // 设置期望的控制输入
     for (int i = 0; i < N; i++) {
-        // 参考轨迹代价
-        if (i < ref_path.size()) {  // 防止越界
-            q_eigen.segment(i*nu, 2) = -2 * Q_.block(0,0,2,2) * 
-                Eigen::Vector2d(ref_path[i].x(), ref_path[i].y());
+        if (i < ref_path.size()) {
+            // 计算期望的控制输入
+            double dx = ref_path[i].x() - current_state[0];
+            double dy = ref_path[i].y() - current_state[1];
+            double desired_theta = atan2(dy, dx);
+            
+            // 设置期望的转向角和速度
+            q_eigen(i*nu) = -desired_theta;  // 转向角
+            q_eigen(i*nu + 1) = -0.5;       // 期望速度
         }
     }
     
