@@ -17,52 +17,57 @@ std::vector<Eigen::Vector2d> generateCirclePath(double radius, int points) {
 }
 
 int main() {
-    // 初始化MPC控制器
-    double dt = 0.1;          // 采样时间0.1秒
-    double L = 1.0;           // 轴距1米
-    int pred_horizon = 20;    // 预测时域20步
-    double max_steer = M_PI/4;// 最大转向角45度
-    double max_speed = 1.0;   // 最大速度1m/s
+    // MPC参数
+    double dt = 0.1;  // 采样时间
+    double L = 2.0;   // 轴距
+    int pred_horizon = 10;  // 缩短预测时域，使控制更积极
+    double max_steer = 0.6;  // 最大转向角约35度
+    double max_speed = 2.0;  // 增大最大速度
     
     MPCController mpc(dt, L, pred_horizon, max_steer, max_speed);
     
-    // 生成圆形参考路径
-    double radius = 5.0;  // 5米半径
-    auto ref_path = generateCirclePath(radius, 100);
+    // 初始状态 [x, y, theta]
+    Eigen::Vector3d current_state(5.0, 0.0, M_PI/2);  // 从右侧开始，朝向上方
     
-    // 初始状态
-    Eigen::Vector3d state(radius, 0, 0);  // 从圆上的一点开始
-    
-    // 用于保存轨迹
-    std::ofstream trajectory_file("trajectory.csv");
-    trajectory_file << "x,y,theta,steer,speed\n";
-    
-    // 仿真循环
-    for (int i = 0; i < 200; ++i) {  // 模拟20秒
-        // 计算控制输入
-        double steer, speed;
-        if (mpc.solve(state, ref_path, steer, speed)) {
-            // 记录当前状态
-            trajectory_file << state[0] << "," << state[1] << "," 
-                          << state[2] << "," << steer << "," << speed << "\n";
-            
-            // 更新状态（简单运动学模型）
-            state[0] += speed * cos(state[2]) * cos(steer) * dt;
-            state[1] += speed * sin(state[2]) * cos(steer) * dt;
-            state[2] += speed * sin(steer) / L * dt;
-            
-            std::cout << "Time: " << i*dt << "s, "
-                     << "Position: (" << state[0] << ", " << state[1] << "), "
-                     << "Heading: " << state[2] << ", "
-                     << "Controls: [" << steer << ", " << speed << "]\n";
-        } else {
-            std::cout << "MPC求解失败！\n";
-            break;
-        }
+    // 生成参考路径（圆形）
+    std::vector<Eigen::Vector2d> ref_path;
+    double radius = 5.0;
+    int num_points = 30;   // 增加路径点，使路径更平滑
+    for (int i = 0; i < num_points; i++) {
+        // 生成1/4圆弧，从π/2到0
+        double theta = M_PI/2 - (M_PI/2) * i / (num_points-1);
+        double x = radius * cos(theta);
+        double y = radius * sin(theta);
+        ref_path.push_back(Eigen::Vector2d(x, y));
     }
     
-    trajectory_file.close();
-    std::cout << "轨迹已保存到trajectory.csv\n";
+    // 存储轨迹
+    std::ofstream file("trajectory.csv");
+    file << "x,y,theta,steer,speed\n";
+    
+    // 模拟
+    double sim_time = 20.0;  // 减小仿真时间
+    int steps = sim_time / dt;
+    
+    for (int i = 0; i < steps; i++) {
+        double steer, speed;
+        if (!mpc.solve(current_state, ref_path, steer, speed)) {
+            std::cout << "MPC求解失败！" << std::endl;
+            break;
+        }
+        
+        // 更新状态
+        current_state[0] += speed * cos(current_state[2]) * cos(steer) * dt;
+        current_state[1] += speed * sin(current_state[2]) * cos(steer) * dt;
+        current_state[2] += speed * sin(steer) / L * dt;
+        
+        // 记录轨迹
+        file << current_state[0] << "," << current_state[1] << "," 
+             << current_state[2] << "," << steer << "," << speed << "\n";
+    }
+    
+    file.close();
+    std::cout << "轨迹已保存到trajectory.csv" << std::endl;
     
     return 0;
 } 

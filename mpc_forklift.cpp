@@ -11,13 +11,13 @@ MPCController::MPCController(double dt, double L, int pred_horizon,
     
     // 初始化权重矩阵
     Q_ = Eigen::MatrixXd::Identity(3, 3);
-    Q_(0,0) = 10.0;    // 降低位置权重，使运动更平滑
-    Q_(1,1) = 10.0;
-    Q_(2,2) = 50.0;    // 保持适度的航向角权重
+    Q_(0,0) = 50.0;    // x位置权重
+    Q_(1,1) = 50.0;    // y位置权重
+    Q_(2,2) = 20.0;    // 航向角权重
     
     R_ = Eigen::MatrixXd::Identity(2, 2);
-    R_(0,0) = 1.0;    // 增加转向权重，防止剧烈转向
-    R_(1,1) = 0.1;    // 保持较小的速度权重
+    R_(0,0) = 1.0;    // 转向权重
+    R_(1,1) = 0.1;    // 速度权重较小，允许更灵活的速度调整
     
     // 初始化OSQP数据
     data_->n = 0;
@@ -196,15 +196,18 @@ void MPCController::setupQPProblem(const Eigen::Vector3d& current_state,
             
             double distance = std::sqrt(dx*dx + dy*dy);
             
-            // 参考Apollo的目标设置
-            double target_speed = std::min(max_speed_, std::max(0.5, 2.0 * distance));
+            // 根据距离和转向角动态调整速度
+            double angle_diff = std::abs(theta_error);
+            double speed_factor = std::max(0.3, 1.0 - angle_diff/M_PI);
+            double target_speed = std::min(max_speed_, std::max(0.5, speed_factor * distance));
+            
             // 状态目标
-            q_eigen(i*nx) = -10.0 * dx;      // 增加x位置目标权重
-            q_eigen(i*nx + 1) = -10.0 * dy;  // 增加y位置目标权重
-            q_eigen(i*nx + 2) = -50.0 * theta_error;  // 增加航向角目标权重
+            q_eigen(i*nx) = -dx;      // x位置目标
+            q_eigen(i*nx + 1) = -dy;  // y位置目标
+            q_eigen(i*nx + 2) = -theta_error;  // 航向角目标
             // 控制目标
             q_eigen(N*nx + i*nu) = 0;  // 转向目标保持为0
-            q_eigen(N*nx + i*nu + 1) = -5.0 * target_speed;  // 增加速度目标权重
+            q_eigen(N*nx + i*nu + 1) = -target_speed;  // 速度目标
         }
     }
     
