@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/mpc_forklift.dir/main.cpp.o CMakeFiles/mpc_forklift.dir/mpc_forklift.cpp.o -o mpc_forklift  -Wl,-rpath,/usr/local/lib /usr/local/lib/libosqp.so 

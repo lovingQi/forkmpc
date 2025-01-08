@@ -1,0 +1,12 @@
+[
+{
+  "directory": "/home/xbl/Desktop/mpc/build",
+  "command": "/usr/bin/g++ -I/home/xbl/Desktop/mpc/Eigen -isystem /usr/local/include/osqp -O3 -DNDEBUG -o CMakeFiles/mpc_forklift.dir/main.cpp.o -c /home/xbl/Desktop/mpc/main.cpp",
+  "file": "/home/xbl/Desktop/mpc/main.cpp"
+},
+{
+  "directory": "/home/xbl/Desktop/mpc/build",
+  "command": "/usr/bin/g++ -I/home/xbl/Desktop/mpc/Eigen -isystem /usr/local/include/osqp -O3 -DNDEBUG -o CMakeFiles/mpc_forklift.dir/mpc_forklift.cpp.o -c /home/xbl/Desktop/mpc/mpc_forklift.cpp",
+  "file": "/home/xbl/Desktop/mpc/mpc_forklift.cpp"
+}
+]

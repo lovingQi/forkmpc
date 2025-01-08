@@ -1,0 +1,3 @@
+/home/xbl/Desktop/mpc/build/CMakeFiles/mpc_forklift.dir
+/home/xbl/Desktop/mpc/build/CMakeFiles/edit_cache.dir
+/home/xbl/Desktop/mpc/build/CMakeFiles/rebuild_cache.dir
