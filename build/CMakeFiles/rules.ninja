@@ -6,7 +6,7 @@
 # It is included in the main 'build.ninja'.
 
 # =============================================================================
-# Project: mpc_forklift
+# Project: forkmpc
 # Configurations: Release
 # =============================================================================
 # =============================================================================
@@ -42,7 +42,7 @@ rule CUSTOM_COMMAND
 # Rule for re-running cmake.
 
 rule RERUN_CMAKE
-  command = /usr/local/bin/cmake --regenerate-during-build -S/home/xbl/Desktop/mpc -B/home/xbl/Desktop/mpc/build
+  command = /usr/local/bin/cmake --regenerate-during-build -S/home/xbl/Desktop/forkmpc/forkmpc -B/home/xbl/Desktop/forkmpc/forkmpc/build
   description = Re-running CMake...
   generator = 1
 

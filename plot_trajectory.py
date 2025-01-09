@@ -50,21 +50,21 @@ line_steer, = ax4.plot([], [], 'b-')
 # 设置其他子图的属性和范围
 ax2.grid(True)
 ax2.set_xlabel('Time (s)')
-ax2.set_ylabel('Heading (rad)')
+ax2.set_ylabel('Heading (deg)')
 ax2.set_title('Heading Angle')
-ax2.set_ylim(min(theta) - 0.1, max(theta) + 0.1)  # 设置合适的显示范围
+ax2.set_ylim(np.degrees(min(theta)) - 5, np.degrees(max(theta)) + 5)
 
 ax3.grid(True)
 ax3.set_xlabel('Time (s)')
 ax3.set_ylabel('Velocity (m/s)')
 ax3.set_title('Vehicle Speed')
-ax3.set_ylim(min(speed) - 0.1, max(speed) + 0.1)  # 设置合适的显示范围
+ax3.set_ylim(min(speed) - 0.1, max(speed) + 0.1)
 
 ax4.grid(True)
 ax4.set_xlabel('Time (s)')
-ax4.set_ylabel('Steering Angle (rad)')
+ax4.set_ylabel('Steering Angle (deg)')
 ax4.set_title('Steering Angle')
-ax4.set_ylim(min(steer) - 0.1, max(steer) + 0.1)  # 设置合适的显示范围
+ax4.set_ylim(np.degrees(min(steer)) - 5, np.degrees(max(steer)) + 5)
 
 # 添加当前值显示
 text_head = ax2.text(0.02, 0.95, '', transform=ax2.transAxes)
@@ -200,15 +200,15 @@ def update(frame):
                            head_width=0.1, head_length=0.2, 
                            fc='g', ec='g')
     
-    # 更新其他图表
-    line_heading.set_data(time[:frame], theta[:frame])
+    # 更新其他图表（转换为度）
+    line_heading.set_data(time[:frame], np.degrees(theta[:frame]))
     line_speed.set_data(time[:frame], speed[:frame])
-    line_steer.set_data(time[:frame], steer[:frame])
+    line_steer.set_data(time[:frame], np.degrees(steer[:frame]))
     
-    # 更新数值显示
-    text_head.set_text(f'Current: {theta[frame]:.2f} rad')
+    # 更新数值显示（转换为度）
+    text_head.set_text(f'Current: {np.degrees(theta[frame]):.1f}°')
     text_speed.set_text(f'Current: {speed[frame]:.2f} m/s')
-    text_steer.set_text(f'Current: {steer[frame]:.2f} rad')
+    text_steer.set_text(f'Current: {np.degrees(steer[frame]):.1f}°')
     
     # 添加垂直线表示当前时间点
     for ax in [ax2, ax3, ax4]:

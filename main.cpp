@@ -86,7 +86,7 @@ int main() {
     last_control << 0.0, 0.0;  // 初始速度和转向角都为0
     
     // 4. 模拟控制过程
-    int sim_steps = 400;  // 从200增加到400
+    int sim_steps = 800;  // 从200增加到400
     
     std::cout << "开始模拟..." << std::endl;
     for(int i = 0; i < sim_steps; i++) {

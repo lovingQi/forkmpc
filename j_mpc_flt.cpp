@@ -4,20 +4,20 @@
 JMpcFlt::JMpcFlt() {
     // 初始化系统参数
     dt_ = 0.1;         
-    max_delta_ = 0.7;  // 约40度
+    max_delta_ = 0.436;  // 25度，根据图片中的约束
     L_ = 2.7;         
     max_v_ = 1.0;     
     rho_ = 1e3;       
     
     // 调整权重矩阵
     Q_ = Eigen::MatrixXd::Identity(STATE_DIM, STATE_DIM);
-    Q_(0,0) = 10.0;    // x位置误差
-    Q_(1,1) = 200.0;   // y位置误差（适当降低）
-    Q_(2,2) = 150.0;   // 增加航向角误差权重
+    Q_(0,0) = 1000.0;    // x位置误差
+    Q_(1,1) = 1000.0;    // y位置误差
+    Q_(2,2) = 1000.0;    // 航向角误差权重
     
     R_ = Eigen::MatrixXd::Identity(CONTROL_DIM, CONTROL_DIM);
-    R_(0,0) = 5.0;     // 速度增量权重
-    R_(1,1) = 1.0;     // 适当增加转向角增量权重，使转向更平滑
+    R_(0,0) = 10.0;     // 速度增量权重
+    R_(1,1) = 15.0;     // 转向角增量权重
 }
 
 void JMpcFlt::linearizeModel(
@@ -117,17 +117,20 @@ void JMpcFlt::buildQPProblem(
     Eigen::VectorXd& lb,
     Eigen::VectorXd& ub) {
     
-    // 构建二次规划问题 (步骤10)
-    // 1. 构建H矩阵
+    // 1. 构建扩展的H矩阵 [H₁]
+    const int n_du = CONTROL_DIM * Nc;
     Eigen::MatrixXd Q_bar = kroneckerProduct(
         Eigen::MatrixXd::Identity(Np, Np), Q_);
     Eigen::MatrixXd R_bar = kroneckerProduct(
         Eigen::MatrixXd::Identity(Nc, Nc), R_);
     
-    Eigen::MatrixXd H_dense = Theta.transpose() * Q_bar * Theta + R_bar;
+    // 扩展H矩阵包含松弛因子
+    Eigen::MatrixXd H_dense = Eigen::MatrixXd::Zero(n_du + 1, n_du + 1);
+    H_dense.topLeftCorner(n_du, n_du) = Theta.transpose() * Q_bar * Theta + R_bar;
+    H_dense(n_du, n_du) = rho_;  // 松弛因子权重
     H = H_dense.sparseView();
     
-    // 2. 构建g向量
+    // 2. 构建g向量 [G₁]
     Eigen::VectorXd xi_0(AUG_STATE_DIM);
     xi_0 << current_state, last_control;
     
@@ -136,33 +139,89 @@ void JMpcFlt::buildQPProblem(
         Y_ref.segment(i*STATE_DIM, STATE_DIM) = reference_path[i];
     }
     
-    g = Theta.transpose() * Q_bar * (Psi * xi_0 - Y_ref);
+    g = Eigen::VectorXd::Zero(n_du + 1);
+    g.head(n_du) = Theta.transpose() * Q_bar * (Psi * xi_0 - Y_ref);
     
-    // 3. 设置约束
-    const int n_du = CONTROL_DIM * Nc;
-    lb = Eigen::VectorXd::Constant(n_du, -0.5);  
-    ub = Eigen::VectorXd::Constant(n_du, 0.5);   
-    
-    // 根据横向偏差和航向角误差调整速度约束
-    double lateral_error = std::abs(current_state(1));
-    double heading_error = std::abs(std::atan2(std::sin(current_state(2)), std::cos(current_state(2))));
-    
-    // 速度上限随偏差和航向角误差指数衰减
-    double v_max = 1.0 * std::exp(-0.3 * lateral_error) * std::exp(-0.5 * heading_error);
-    v_max = std::max(0.3, v_max);  // 保持最小速度
-    
-    // 控制量约束
+    // 3. 构建约束矩阵A
+    // 构建控制量累积矩阵
+    Eigen::MatrixXd A_du = Eigen::MatrixXd::Zero(n_du, n_du);
     for(int i = 0; i < Nc; i++) {
-        // 速度约束
-        double v_min = -0.3;  // 允许小幅后退
-        lb(i*CONTROL_DIM) = v_min - last_control(0);
-        ub(i*CONTROL_DIM) = v_max - last_control(0);
-        
-        // 转向角约束
-        double delta_range = max_delta_ * (0.5 + 0.5 * std::exp(-0.5 * lateral_error));
-        lb(i*CONTROL_DIM+1) = -delta_range - last_control(1);
-        ub(i*CONTROL_DIM+1) = delta_range - last_control(1);
+        for(int j = 0; j <= i; j++) {
+            A_du.block(i*CONTROL_DIM, j*CONTROL_DIM, CONTROL_DIM, CONTROL_DIM) = 
+                Eigen::MatrixXd::Identity(CONTROL_DIM, CONTROL_DIM);
+        }
     }
+    
+    // 4. 设置约束边界
+    // 控制量约束
+    const double v_min = -1;      // 速度下限
+    const double v_max = 1;       // 速度上限
+    const double delta_max = 0.436;  // 25度转换为弧度
+    
+    // 控制增量约束 (根据图片4.22和4.23)
+    const double dv_max = 0.1;      // 速度变化率限制
+    const double ddelta_max = 0.041; // 2.35度转换为弧度
+    
+    // 添加一个小的数值容差
+    const double eps = 1e-6;
+    
+    // 构建约束向量
+    Eigen::VectorXd du_lb = Eigen::VectorXd::Constant(n_du, -std::numeric_limits<double>::infinity());
+    Eigen::VectorXd du_ub = Eigen::VectorXd::Constant(n_du, std::numeric_limits<double>::infinity());
+    
+    for(int i = 0; i < Nc; i++) {
+        // 速度增量约束
+        du_lb(i*CONTROL_DIM) = -dv_max - eps;
+        du_ub(i*CONTROL_DIM) = dv_max + eps;
+        
+        // 转向角增量约束
+        du_lb(i*CONTROL_DIM+1) = -ddelta_max - eps;
+        du_ub(i*CONTROL_DIM+1) = ddelta_max + eps;
+        
+        // 累积控制量约束
+        Eigen::VectorXd u_lb(CONTROL_DIM), u_ub(CONTROL_DIM);
+        u_lb << v_min, -delta_max;
+        u_ub << v_max, delta_max;
+        
+        // 考虑当前状态调整约束
+        double lateral_error = std::abs(current_state(1));
+        double heading_error = std::abs(std::atan2(std::sin(current_state(2)), std::cos(current_state(2))));
+        
+        // 根据误差调整速度上限
+        u_ub(0) = v_max * std::exp(-0.3 * lateral_error) * std::exp(-0.5 * heading_error);
+        u_ub(0) = std::max(0.3, u_ub(0));
+        
+        // 根据误差调整转向角范围
+        double delta_range = delta_max * (0.5 + 0.5 * std::exp(-0.5 * lateral_error));
+        u_lb(1) = -delta_range;
+        u_ub(1) = delta_range;
+        
+        // 转换为增量约束，添加数值容差
+        Eigen::VectorXd du_lb_i = (u_lb - last_control - A_du.block(i*CONTROL_DIM, 0, CONTROL_DIM, i*CONTROL_DIM) * 
+                                  du_lb.head(i*CONTROL_DIM)).array() - eps;
+        Eigen::VectorXd du_ub_i = (u_ub - last_control - A_du.block(i*CONTROL_DIM, 0, CONTROL_DIM, i*CONTROL_DIM) * 
+                                  du_ub.head(i*CONTROL_DIM)).array() + eps;
+        
+        // 确保约束的上下界有效
+        for(int j = 0; j < CONTROL_DIM; j++) {
+            if(du_ub_i(j) < du_lb_i(j)) {
+                double mid = (du_ub_i(j) + du_lb_i(j)) / 2.0;
+                du_lb_i(j) = mid - eps;
+                du_ub_i(j) = mid + eps;
+            }
+        }
+        
+        du_lb.segment(i*CONTROL_DIM, CONTROL_DIM) = du_lb_i;
+        du_ub.segment(i*CONTROL_DIM, CONTROL_DIM) = du_ub_i;
+    }
+    
+    // 添加松弛因子约束
+    lb = Eigen::VectorXd::Zero(n_du + 1);
+    ub = Eigen::VectorXd::Zero(n_du + 1);
+    lb.head(n_du) = du_lb;
+    ub.head(n_du) = du_ub;
+    lb(n_du) = 0;  // 松弛因子非负
+    ub(n_du) = 1e10;  // 松弛因子上界
 }
 
 Eigen::VectorXd JMpcFlt::solve(
@@ -172,11 +231,17 @@ Eigen::VectorXd JMpcFlt::solve(
     
     // 计算期望控制序列
     std::vector<Eigen::VectorXd> reference_controls(Np);
+    
+    // 根据横向误差和航向误差动态调整参考速度
+    double lateral_error = std::abs(current_state(1));
+    double heading_error = std::abs(std::atan2(std::sin(current_state(2)), std::cos(current_state(2))));
+    
+    // 参考速度随误差指数衰减
+    double v_ref = 0.2 * std::exp(-0.3 * lateral_error) * std::exp(-0.5 * heading_error);
+    v_ref = std::max(0.05, v_ref);  // 保持最小速度
+    
     for(int i = 0; i < Np-1; i++) {
-        // 计算期望航向角变化率
         double dphi = reference_path[i+1](2) - reference_path[i](2);
-        // 根据运动学模型反解控制量
-        double v_ref = 0.5;  // 设定一个合理的参考速度
         double delta_ref = atan2(dphi * L_, v_ref * dt_);
         
         Eigen::VectorXd ref_u(CONTROL_DIM);

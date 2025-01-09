@@ -55,7 +55,7 @@
 				}
 			],
 			"type" : "INTERNAL",
-			"value" : "/home/xbl/Desktop/mpc/build"
+			"value" : "/home/xbl/Desktop/forkmpc/forkmpc/build"
 		},
 		{
 			"name" : "CMAKE_CACHE_MAJOR_VERSION",
@@ -139,10 +139,10 @@
 				},
 				{
 					"name" : "HELPSTRING",
-					"value" : "No help, variable specified on the command line."
+					"value" : "CXX compiler"
 				}
 			],
-			"type" : "FILEPATH",
+			"type" : "STRING",
 			"value" : "/usr/bin/g++"
 		},
 		{
@@ -267,10 +267,10 @@
 				},
 				{
 					"name" : "HELPSTRING",
-					"value" : "No help, variable specified on the command line."
+					"value" : "C compiler"
 				}
 			],
-			"type" : "FILEPATH",
+			"type" : "STRING",
 			"value" : "/usr/bin/gcc"
 		},
 		{
@@ -575,7 +575,7 @@
 				}
 			],
 			"type" : "INTERNAL",
-			"value" : "/home/xbl/Desktop/mpc"
+			"value" : "/home/xbl/Desktop/forkmpc/forkmpc"
 		},
 		{
 			"name" : "CMAKE_INSTALL_PREFIX",
@@ -819,7 +819,7 @@
 				}
 			],
 			"type" : "STATIC",
-			"value" : "mpc_forklift"
+			"value" : "forkmpc"
 		},
 		{
 			"name" : "CMAKE_RANLIB",
@@ -1102,7 +1102,19 @@
 			"value" : "FALSE"
 		},
 		{
-			"name" : "mpc_forklift_BINARY_DIR",
+			"name" : "Eigen3_DIR",
+			"properties" : 
+			[
+				{
+					"name" : "HELPSTRING",
+					"value" : "The directory containing a CMake configuration file for Eigen3."
+				}
+			],
+			"type" : "PATH",
+			"value" : "/usr/lib/cmake/eigen3"
+		},
+		{
+			"name" : "forkmpc_BINARY_DIR",
 			"properties" : 
 			[
 				{
@@ -1111,10 +1123,10 @@
 				}
 			],
 			"type" : "STATIC",
-			"value" : "/home/xbl/Desktop/mpc/build"
+			"value" : "/home/xbl/Desktop/forkmpc/forkmpc/build"
 		},
 		{
-			"name" : "mpc_forklift_IS_TOP_LEVEL",
+			"name" : "forkmpc_IS_TOP_LEVEL",
 			"properties" : 
 			[
 				{
@@ -1126,7 +1138,7 @@
 			"value" : "ON"
 		},
 		{
-			"name" : "mpc_forklift_SOURCE_DIR",
+			"name" : "forkmpc_SOURCE_DIR",
 			"properties" : 
 			[
 				{
@@ -1135,7 +1147,7 @@
 				}
 			],
 			"type" : "STATIC",
-			"value" : "/home/xbl/Desktop/mpc"
+			"value" : "/home/xbl/Desktop/forkmpc/forkmpc"
 		},
 		{
 			"name" : "osqp_DIR",
