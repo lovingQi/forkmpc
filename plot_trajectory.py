@@ -34,8 +34,8 @@ plt.grid(True)
 plt.legend()
 
 # 调整显示范围
-plt.xlim(-6, 16)
-plt.ylim(-3, 3)
+plt.xlim(-12, 32)
+plt.ylim(-4, 4)
 
 # 绘制子图2：航向角
 plt.subplot(2, 2, 2)

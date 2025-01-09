@@ -12,12 +12,12 @@ JMpcFlt::JMpcFlt() {
     // 调整权重矩阵
     Q_ = Eigen::MatrixXd::Identity(STATE_DIM, STATE_DIM);
     Q_(0,0) = 10.0;    // x位置误差
-    Q_(1,1) = 500.0;   // y位置误差（大幅增加横向跟踪权重）
-    Q_(2,2) = 100.0;   // 航向角误差
+    Q_(1,1) = 200.0;   // y位置误差（适当降低）
+    Q_(2,2) = 150.0;   // 增加航向角误差权重
     
     R_ = Eigen::MatrixXd::Identity(CONTROL_DIM, CONTROL_DIM);
-    R_(0,0) = 1.0;     // 速度增量权重
-    R_(1,1) = 0.1;     // 转向角增量权重（降低以允许更灵活的转向）
+    R_(0,0) = 5.0;     // 速度增量权重
+    R_(1,1) = 1.0;     // 适当增加转向角增量权重，使转向更平滑
 }
 
 void JMpcFlt::linearizeModel(
@@ -143,17 +143,25 @@ void JMpcFlt::buildQPProblem(
     lb = Eigen::VectorXd::Constant(n_du, -0.5);  
     ub = Eigen::VectorXd::Constant(n_du, 0.5);   
     
+    // 根据横向偏差和航向角误差调整速度约束
+    double lateral_error = std::abs(current_state(1));
+    double heading_error = std::abs(std::atan2(std::sin(current_state(2)), std::cos(current_state(2))));
+    
+    // 速度上限随偏差和航向角误差指数衰减
+    double v_max = 1.0 * std::exp(-0.3 * lateral_error) * std::exp(-0.5 * heading_error);
+    v_max = std::max(0.3, v_max);  // 保持最小速度
+    
     // 控制量约束
     for(int i = 0; i < Nc; i++) {
         // 速度约束
-        double v_min = -0.5;  // 允许小幅后退
-        double v_max = 1.0;   // 最大前进速度
+        double v_min = -0.3;  // 允许小幅后退
         lb(i*CONTROL_DIM) = v_min - last_control(0);
         ub(i*CONTROL_DIM) = v_max - last_control(0);
         
         // 转向角约束
-        lb(i*CONTROL_DIM+1) = -max_delta_ - last_control(1);
-        ub(i*CONTROL_DIM+1) = max_delta_ - last_control(1);
+        double delta_range = max_delta_ * (0.5 + 0.5 * std::exp(-0.5 * lateral_error));
+        lb(i*CONTROL_DIM+1) = -delta_range - last_control(1);
+        ub(i*CONTROL_DIM+1) = delta_range - last_control(1);
     }
 }
 

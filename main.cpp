@@ -3,15 +3,16 @@
 #include <vector>
 #include <cmath>
 #include <fstream>
+#include <limits>
 
 // 生成参考轨迹（直线）
 std::vector<Eigen::VectorXd> generateReferencePath() {
     std::vector<Eigen::VectorXd> reference_path;
     
-    // 生成一条直线轨迹 (y = 0)
-    double start_x = -5.0;
-    double end_x = 15.0;
-    int points = 100;
+    // 生成一条更长的直线轨迹 (y = 0)
+    double start_x = -10.0;  // 起点更远
+    double end_x = 30.0;     // 终点更远
+    int points = 200;        // 增加轨迹点数
     
     for(int i = 0; i < points; i++) {
         Eigen::VectorXd state(3);
@@ -30,6 +31,47 @@ std::vector<Eigen::VectorXd> generateReferencePath() {
     return reference_path;
 }
 
+// 修改找最近点的函数，增加预瞄距离
+int findClosestPoint(const Eigen::VectorXd& current_state, 
+                    const std::vector<Eigen::VectorXd>& reference_path,
+                    double preview_distance = 3.0) {  // 增加预瞄距离参数
+    int closest_idx = 0;
+    double min_dist = std::numeric_limits<double>::max();
+    
+    // 1. 找到最近点
+    for(int i = 0; i < reference_path.size(); i++) {
+        double dx = current_state(0) - reference_path[i](0);
+        double dy = current_state(1) - reference_path[i](1);
+        double dist = dx*dx + dy*dy;
+        
+        if(dist < min_dist) {
+            min_dist = dist;
+            closest_idx = i;
+        }
+    }
+    
+    // 2. 从最近点往前找预瞄点
+    double accumulated_dist = 0.0;
+    int preview_idx = closest_idx;
+    
+    while(preview_idx < reference_path.size() - 1 && 
+          accumulated_dist < preview_distance) {
+        double dx = reference_path[preview_idx + 1](0) - reference_path[preview_idx](0);
+        double dy = reference_path[preview_idx + 1](1) - reference_path[preview_idx](1);
+        accumulated_dist += std::sqrt(dx*dx + dy*dy);
+        preview_idx++;
+    }
+    
+    return preview_idx;
+}
+
+// 修改预瞄距离计算
+double getPreviewDistance(double velocity) {
+    const double base_preview = 2.0;  // 基础预瞄距离
+    const double velocity_gain = 2.0;  // 速度增益
+    return base_preview + velocity_gain * std::abs(velocity);  // 预瞄距离随速度增加
+}
+
 int main() {
     // 创建文件保存轨迹
     std::ofstream trajectory_file("trajectory.csv");
@@ -43,7 +85,7 @@ int main() {
     
     // 3. 设置初始状态和控制
     Eigen::VectorXd current_state(3);
-    current_state << 0.0, 2.0, -M_PI/6;  // 初始位置：x=0, y=2(偏离直线2米), 航向角=-30度
+    current_state << 0.0, 3.0, -M_PI/6;  // 增大初始横向偏差到3米
     
     Eigen::VectorXd last_control(2);
     last_control << 0.0, 0.0;  // 初始速度和转向角都为0
@@ -53,12 +95,13 @@ int main() {
     
     std::cout << "开始模拟..." << std::endl;
     for(int i = 0; i < sim_steps; i++) {
-        // 获取当前位置对应的预测范围内的参考轨迹
-        std::vector<Eigen::VectorXd> local_reference;
-        int start_idx = i % reference_path.size();
+        double preview_dist = getPreviewDistance(last_control(0));
+        int preview_idx = findClosestPoint(current_state, reference_path, preview_dist);
         
+        // 获取从预瞄点开始往前的预测范围内的参考轨迹
+        std::vector<Eigen::VectorXd> local_reference;
         for(int j = 0; j < mpc.Np; j++) {
-            int idx = (start_idx + j) % reference_path.size();
+            int idx = std::min(preview_idx + j, (int)reference_path.size() - 1);
             local_reference.push_back(reference_path[idx]);
         }
         
