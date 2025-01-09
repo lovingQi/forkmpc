@@ -8,13 +8,14 @@ import matplotlib.patches as patches
 df = pd.read_csv('trajectory.csv')
 
 # 创建图形
-fig = plt.figure(figsize=(15, 10))
+fig = plt.figure(figsize=(15, 12))  # 增加图形高度以容纳更多子图
 
-# 设置子图
-ax1 = plt.subplot(2, 2, 1)  # 轨迹
-ax2 = plt.subplot(2, 2, 2)  # 航向角
-ax3 = plt.subplot(2, 2, 3)  # 速度
-ax4 = plt.subplot(2, 2, 4)  # 转向角
+# 设置子图 (3行2列)
+ax1 = plt.subplot(3, 2, (1, 2))  # 轨迹图占据第一行
+ax2 = plt.subplot(3, 2, 3)       # 航向角
+ax3 = plt.subplot(3, 2, 4)       # 速度
+ax4 = plt.subplot(3, 2, 5)       # 转向角
+ax5 = plt.subplot(3, 2, 6)       # 误差图
 
 # 转换数据为numpy数组
 x = df['x'].to_numpy()
@@ -24,17 +25,69 @@ speed = df['speed'].to_numpy()
 steer = df['steer'].to_numpy()
 time = np.arange(len(df)) * 0.1
 
+def cubic_bezier(p0, p1, p2, p3, t):
+    t2 = t * t
+    t3 = t2 * t
+    mt = 1 - t
+    mt2 = mt * mt
+    mt3 = mt2 * mt
+    return p0 * mt3 + p1 * (3 * mt2 * t) + p2 * (3 * mt * t2) + p3 * t3
+
+# 生成参考路径点
+density = 50
+x_ref = []
+y_ref = []
+
+# 第一段：直线
+t = np.linspace(0, 1, density)
+x_ref.extend(-10 + t * 10)
+y_ref.extend(np.zeros_like(t))
+
+# 第二段：右转弯（贝塞尔曲线）
+p0 = np.array([0, 0])
+p1 = np.array([5, 0])
+p2 = np.array([10, 2])
+p3 = np.array([10, 5])
+
+for t in np.linspace(0, 1, density):
+    point = cubic_bezier(p0, p1, p2, p3, t)
+    x_ref.append(point[0])
+    y_ref.append(point[1])
+
+# 第三段：直线
+t = np.linspace(0, 1, density)
+x_ref.extend(np.full_like(t, 10))
+y_ref.extend(5 + t * 5)
+
+# 第四段：左转弯
+p0 = np.array([10, 10])
+p1 = np.array([10, 13])
+p2 = np.array([8, 15])
+p3 = np.array([5, 15])
+
+for t in np.linspace(0, 1, density):
+    point = cubic_bezier(p0, p1, p2, p3, t)
+    x_ref.append(point[0])
+    y_ref.append(point[1])
+
+# 第五段：直线
+t = np.linspace(0, 1, density)
+x_ref.extend(5 - t * 15)
+y_ref.extend(np.full_like(t, 15))
+
+# 转换为numpy数组
+x_ref = np.array(x_ref)
+y_ref = np.array(y_ref)
+
 # 绘制参考轨迹（固定的）
-x_ref = np.linspace(-10, 50, 200)  # 延长参考轨迹显示范围
-y_ref = np.zeros_like(x_ref)
 ax1.plot(x_ref, y_ref, 'r--', label='Reference Path')
 ax1.grid(True)
 ax1.set_xlabel('X (m)')
 ax1.set_ylabel('Y (m)')
 ax1.set_title('Vehicle Trajectory')
 ax1.axis('equal')
-ax1.set_xlim(-12, 52)  # 调整显示范围
-ax1.set_ylim(-4, 4)
+ax1.set_xlim(-15, 15)
+ax1.set_ylim(-5, 20)
 
 # 初始化动态线条
 line_traj, = ax1.plot([], [], 'b-', label='Actual Trajectory')
@@ -149,6 +202,59 @@ def draw_forklift(ax, x, y, theta, steer_angle, color='g'):
     draw_forklift.rear_wheel = patches.Polygon(rear_wheel_corners, color='black', alpha=0.8)
     ax.add_patch(draw_forklift.rear_wheel)
 
+# 添加误差计算函数
+def calculate_tracking_errors(pos, theta, ref_points):
+    # 找到最近的两个参考点以构建局部参考线
+    current_pos = np.array(pos)
+    distances = np.linalg.norm(ref_points - current_pos, axis=1)
+    closest_idx = np.argmin(distances)
+    
+    # 确保我们有下一个点来计算方向
+    if closest_idx == len(ref_points) - 1:
+        closest_idx = len(ref_points) - 2
+    
+    # 获取最近的两个参考点
+    p1 = ref_points[closest_idx]
+    p2 = ref_points[closest_idx + 1]
+    
+    # 计算参考线的方向
+    ref_direction = p2 - p1
+    ref_angle = np.arctan2(ref_direction[1], ref_direction[0])
+    
+    # 计算从当前位置到参考线的垂线交点
+    # 参考线方程: p = p1 + t*(p2-p1)
+    # 垂线方程: (p - current_pos)·(p2-p1) = 0
+    v = p2 - p1
+    w = current_pos - p1
+    t = np.dot(w, v) / np.dot(v, v)
+    t = np.clip(t, 0, 1)  # 确保交点在两个参考点之间
+    
+    # 计算交点
+    intersection = p1 + t * v
+    
+    # 计算横向误差（带符号）
+    lateral_error = np.cross(v, w) / np.linalg.norm(v)
+    
+    # 计算航向误差（带符号）
+    heading_error = theta - ref_angle
+    # 归一化到[-pi, pi]
+    heading_error = np.arctan2(np.sin(heading_error), np.cos(heading_error))
+    
+    return lateral_error, heading_error, intersection
+
+# 初始化误差曲线
+line_lateral_error, = ax5.plot([], [], 'r-', label='Lateral Error')
+line_heading_error, = ax5.plot([], [], 'b-', label='Heading Error')
+ax5.grid(True)
+ax5.set_xlabel('Time (s)')
+ax5.set_ylabel('Error')
+ax5.set_title('Tracking Errors')
+ax5.legend()
+
+# 添加误差数值显示
+text_lateral = ax5.text(0.02, 0.95, '', transform=ax5.transAxes)
+text_heading = ax5.text(0.02, 0.85, '', transform=ax5.transAxes)
+
 def init():
     line_traj.set_data([], [])
     point_vehicle.set_data([], [])
@@ -157,7 +263,9 @@ def init():
     line_heading.set_data([], [])
     line_speed.set_data([], [])
     line_steer.set_data([], [])
-    return line_traj, point_vehicle, point_reference, preview_line, line_heading, line_speed, line_steer
+    line_lateral_error.set_data([], [])
+    line_heading_error.set_data([], [])
+    return line_traj, point_vehicle, point_reference, preview_line, line_heading, line_speed, line_steer, line_lateral_error, line_heading_error
 
 def update(frame):
     # 更新轨迹
@@ -216,12 +324,48 @@ def update(frame):
             ax.time_line.remove()
         ax.time_line = ax.axvline(time[frame], color='r', linestyle='--', alpha=0.5)
     
-    return line_traj, point_vehicle, point_reference, preview_line, line_heading, line_speed, line_steer
+    # 计算跟踪误差
+    ref_points = np.column_stack((x_ref, y_ref))
+    lateral_error, heading_error, intersection = calculate_tracking_errors(
+        [x[frame], y[frame]], theta[frame], ref_points)
+    
+    # 更新误差图
+    lateral_errors = [calculate_tracking_errors(
+        [x[i], y[i]], theta[i], ref_points)[0] for i in range(frame+1)]
+    heading_errors = [calculate_tracking_errors(
+        [x[i], y[i]], theta[i], ref_points)[1] for i in range(frame+1)]
+    
+    line_lateral_error.set_data(time[:frame+1], lateral_errors)
+    line_heading_error.set_data(time[:frame+1], heading_errors)
+    
+    # 更新误差数值显示
+    text_lateral.set_text(f'Lateral Error: {lateral_error:.2f} m')
+    text_heading.set_text(f'Heading Error: {heading_error:.2f} rad')
+    
+    # 在轨迹图上显示垂线交点
+    if hasattr(update, 'intersection_point'):
+        update.intersection_point.remove()
+    update.intersection_point = ax1.plot(intersection[0], intersection[1], 'mx', 
+                                       markersize=8, label='Projection Point')[0]
+    
+    # 绘制从车辆到垂直交点的连线
+    if hasattr(update, 'error_line'):
+        update.error_line.remove()
+    update.error_line = ax1.plot([x[frame], intersection[0]], 
+                                [y[frame], intersection[1]], 
+                                'm--', alpha=0.5)[0]
+    
+    return (line_traj, point_vehicle, point_reference, preview_line, 
+            line_heading, line_speed, line_steer, 
+            line_lateral_error, line_heading_error)
 
 # 创建动画，降低interval使动画更流畅
 anim = FuncAnimation(fig, update, frames=len(df), 
                     init_func=init, interval=20,  # 20ms per frame
                     blit=False, repeat=True)  # 允许重复播放
+
+# 调整显示范围
+ax5.set_ylim(-2, 2)  # 根据实际误差范围调整
 
 plt.tight_layout()
 plt.show() 

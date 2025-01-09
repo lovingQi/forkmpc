@@ -5,21 +5,92 @@
 #include <fstream>
 #include <limits>
 
-// 生成参考轨迹（直线）
+// 添加贝塞尔曲线计算函数
+Eigen::Vector2d cubicBezier(const Eigen::Vector2d& p0, const Eigen::Vector2d& p1,
+                           const Eigen::Vector2d& p2, const Eigen::Vector2d& p3, double t) {
+    double t2 = t * t;
+    double t3 = t2 * t;
+    double mt = 1 - t;
+    double mt2 = mt * mt;
+    double mt3 = mt2 * mt;
+    
+    return p0 * mt3 + p1 * (3 * mt2 * t) + p2 * (3 * mt * t2) + p3 * t3;
+}
+
+// 生成复合参考路径
 std::vector<Eigen::VectorXd> generateReferencePath() {
     std::vector<Eigen::VectorXd> reference_path;
+    std::vector<Eigen::Vector2d> points;
     
-    // 生成一条更长的直线轨迹 (y = 0)
-    double start_x = -10.0;
-    double end_x = 50.0;     // 延长终点距离
-    int points = 300;        // 增加轨迹点数
+    // 路径点密度
+    const int density = 50;  // 每段曲线的采样点数
     
-    for(int i = 0; i < points; i++) {
+    // 第一段：直线
+    for(int i = 0; i < density; i++) {
+        double t = static_cast<double>(i) / density;
+        Eigen::Vector2d point(-10 + t * 10, 0);  // 从(-10,0)到(0,0)的直线
+        points.push_back(point);
+    }
+    
+    // 第二段：右转弯（贝塞尔曲线）
+    Eigen::Vector2d p0(0, 0);
+    Eigen::Vector2d p1(5, 0);
+    Eigen::Vector2d p2(10, 2);
+    Eigen::Vector2d p3(10, 5);
+    
+    for(int i = 0; i < density; i++) {
+        double t = static_cast<double>(i) / density;
+        points.push_back(cubicBezier(p0, p1, p2, p3, t));
+    }
+    
+    // 第三段：直线
+    for(int i = 0; i < density; i++) {
+        double t = static_cast<double>(i) / density;
+        Eigen::Vector2d point(10, 5 + t * 5);  // 向上的直线
+        points.push_back(point);
+    }
+    
+    // 第四段：左转弯
+    p0 = Eigen::Vector2d(10, 10);
+    p1 = Eigen::Vector2d(10, 13);
+    p2 = Eigen::Vector2d(8, 15);
+    p3 = Eigen::Vector2d(5, 15);
+    
+    for(int i = 0; i < density; i++) {
+        double t = static_cast<double>(i) / density;
+        points.push_back(cubicBezier(p0, p1, p2, p3, t));
+    }
+    
+    // 第五段：直线
+    for(int i = 0; i < density; i++) {
+        double t = static_cast<double>(i) / density;
+        Eigen::Vector2d point(5 - t * 15, 15);  // 向左的直线
+        points.push_back(point);
+    }
+    
+    // 计算路径点的航向角
+    for(size_t i = 0; i < points.size(); i++) {
         Eigen::VectorXd state(3);
-        double x = start_x + (end_x - start_x) * i / (points - 1);
-        state(0) = x;      
-        state(1) = 0.0;    
-        state(2) = 0.0;    
+        state(0) = points[i].x();
+        state(1) = points[i].y();
+        
+        // 计算航向角（使用前后点计算切线方向）
+        if(i == 0) {
+            double dx = points[1].x() - points[0].x();
+            double dy = points[1].y() - points[0].y();
+            state(2) = std::atan2(dy, dx);
+        }
+        else if(i == points.size() - 1) {
+            double dx = points[i].x() - points[i-1].x();
+            double dy = points[i].y() - points[i-1].y();
+            state(2) = std::atan2(dy, dx);
+        }
+        else {
+            double dx = points[i+1].x() - points[i-1].x();
+            double dy = points[i+1].y() - points[i-1].y();
+            state(2) = std::atan2(dy, dx);
+        }
+        
         reference_path.push_back(state);
     }
     
@@ -80,13 +151,13 @@ int main() {
     
     // 3. 设置初始状态和控制
     Eigen::VectorXd current_state(3);
-    current_state << 0.0, 3.0, -M_PI/6;  // 增大初始横向偏差到3米
+    current_state << -10.0, 2.0, 0.0;  // 起点位置和航向角
     
     Eigen::VectorXd last_control(2);
     last_control << 0.0, 0.0;  // 初始速度和转向角都为0
     
     // 4. 模拟控制过程
-    int sim_steps = 400;  // 从200增加到400
+    int sim_steps = 800;  // 增加仿真步数以完成更长的路径
     
     std::cout << "开始模拟..." << std::endl;
     for(int i = 0; i < sim_steps; i++) {
