@@ -1,8 +1,8 @@
 #ifndef J_MPC_FLT_H
 #define J_MPC_FLT_H
 
-#include <Eigen/Dense>
-#include <Eigen/Sparse>
+#include "Eigen/Dense"
+#include "Eigen/Sparse"
 #include <vector>
 #include <osqp/osqp.h>
 

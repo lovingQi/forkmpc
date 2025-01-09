@@ -1,70 +1,67 @@
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 
 # 读取轨迹数据
-data = pd.read_csv('trajectory.csv')
+df = pd.read_csv('trajectory.csv')
 
-# 转换数据为numpy数组
-x = data['x'].to_numpy()
-y = data['y'].to_numpy()
-theta = data['theta'].to_numpy()
-steer = data['steer'].to_numpy()
-speed = data['speed'].to_numpy()
+# 打印列名以检查
+print("CSV文件的列名:", df.columns.tolist())
 
 # 创建图形
-plt.figure(figsize=(12, 8))
+plt.figure(figsize=(15, 10))
 
-# 绘制参考路径（圆）
-circle_theta = np.linspace(0, 2*np.pi, 100)
-radius = 5.0
-plt.plot(radius*np.cos(circle_theta), radius*np.sin(circle_theta), 'r--', label='Reference Path')
-
-# 绘制实际轨迹
+# 绘制子图1：轨迹
+plt.subplot(2, 2, 1)
+# 将pandas数据转换为numpy数组
+x = df['x'].to_numpy()
+y = df['y'].to_numpy()
 plt.plot(x, y, 'b-', label='Actual Trajectory')
 
-# 绘制起点和终点
-plt.plot(x[0], y[0], 'go', label='Start', markersize=10)
-plt.plot(x[-1], y[-1], 'ro', label='End', markersize=10)
+# 绘制参考直线轨迹
+x_ref = np.linspace(-5, 15, 100)
+y_ref = np.zeros_like(x_ref)
+plt.plot(x_ref, y_ref, 'r--', label='Reference Path')
 
-# 添加箭头表示车辆朝向
-skip = 10  # 每隔10个点画一个箭头
-for i in range(0, len(x), skip):
-    plt.arrow(x[i], y[i], 
-              0.3*np.cos(theta[i]), 
-              0.3*np.sin(theta[i]),
-              head_width=0.1, head_length=0.2, fc='g', ec='g', alpha=0.5)
+# 绘制起点
+plt.plot(x[0], y[0], 'go', markersize=10, label='Start Point')
 
-# 设置图形属性
+plt.xlabel('X (m)')
+plt.ylabel('Y (m)')
+plt.title('Vehicle Trajectory')
 plt.axis('equal')
 plt.grid(True)
 plt.legend()
-plt.title('Forklift Path Tracking Performance')
-plt.xlabel('X (m)')
-plt.ylabel('Y (m)')
 
-# 添加控制输入的子图
-plt.figure(figsize=(12, 4))
+# 调整显示范围
+plt.xlim(-6, 16)
+plt.ylim(-3, 3)
 
-# 时间数组
-time = np.arange(len(data)) * 0.1  # dt = 0.1s
-
-# 绘制转向角
-plt.subplot(1, 2, 1)
-plt.plot(time, steer, 'b-')
+# 绘制子图2：航向角
+plt.subplot(2, 2, 2)
+time = np.arange(len(df)) * 0.1
+plt.plot(time, df['theta'].to_numpy(), 'g-')
+plt.xlabel('Time (s)')
+plt.ylabel('Heading (rad)')
+plt.title('Heading Angle')
 plt.grid(True)
+
+# 绘制子图3：速度
+plt.subplot(2, 2, 3)
+plt.plot(time, df['speed'].to_numpy(), 'r-')
+plt.xlabel('Time (s)')
+plt.ylabel('Velocity (m/s)')
+plt.title('Vehicle Speed')
+plt.grid(True)
+
+# 绘制子图4：转向角
+plt.subplot(2, 2, 4)
+plt.plot(time, df['steer'].to_numpy(), 'b-')
+plt.xlabel('Time (s)')
+plt.ylabel('Steering Angle (rad)')
 plt.title('Steering Angle')
-plt.xlabel('Time (s)')
-plt.ylabel('Angle (rad)')
-
-# 绘制速度
-plt.subplot(1, 2, 2)
-plt.plot(time, speed, 'r-')
 plt.grid(True)
-plt.title('Speed')
-plt.xlabel('Time (s)')
-plt.ylabel('Speed (m/s)')
 
-# 调整布局并显示
 plt.tight_layout()
+plt.savefig('mpc_results.png')
 plt.show() 

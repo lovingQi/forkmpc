@@ -1,10 +1,26 @@
 cmake_minimum_required(VERSION 3.10)
-project(mpc_forklift)
+project(forkmpc)
 
-# 添加Eigen头文件路径
-include_directories(${PROJECT_SOURCE_DIR}/Eigen)
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_BUILD_TYPE Release)
 
+# 查找依赖包
+find_package(Eigen3 REQUIRED)
 find_package(osqp REQUIRED)
 
-add_executable(mpc_forklift main.cpp mpc_forklift.cpp)
-target_link_libraries(mpc_forklift osqp::osqp) 
+# 添加可执行文件
+add_executable(mpc_forklift 
+    main.cpp
+    j_mpc_flt.cpp    # 添加新的源文件
+)
+
+# 包含目录
+target_include_directories(mpc_forklift PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${EIGEN3_INCLUDE_DIRS}
+)
+
+# 链接库
+target_link_libraries(mpc_forklift PRIVATE
+    osqp::osqp
+) 

@@ -188,7 +188,7 @@ Eigen::VectorXd JMpcFlt::solve(
     // 5. 设置OSQP数据
     OSQPData* data = (OSQPData*)c_malloc(sizeof(OSQPData));
     data->n = H.rows();
-    data->m = 0;  // 没有不等式约束
+    data->m = H.rows();  // 约束数量等于变量数量
     
     // 转换为CSC格式
     Eigen::SparseMatrix<double> H_upper = H.triangularView<Eigen::Upper>();
@@ -197,11 +197,25 @@ Eigen::VectorXd JMpcFlt::solve(
     std::vector<c_int> H_inner(H_upper.innerIndexPtr(), 
                               H_upper.innerIndexPtr() + H_upper.nonZeros());
     
+    // 创建单位矩阵作为约束矩阵A
+    Eigen::SparseMatrix<double> A = Eigen::SparseMatrix<double>(H.rows(), H.rows());
+    A.setIdentity();
+    std::vector<c_int> A_outer(A.outerIndexPtr(),
+                              A.outerIndexPtr() + A.outerSize() + 1);
+    std::vector<c_int> A_inner(A.innerIndexPtr(),
+                              A.innerIndexPtr() + A.nonZeros());
+    
     data->P = csc_matrix(H_upper.rows(), H_upper.cols(),
                         H_upper.nonZeros(),
                         H_upper.valuePtr(),
                         H_inner.data(),
                         H_outer.data());
+    
+    data->A = csc_matrix(A.rows(), A.cols(),
+                        A.nonZeros(),
+                        A.valuePtr(),
+                        A_inner.data(),
+                        A_outer.data());
     
     data->q = g.data();
     data->l = lb.data();
