@@ -132,17 +132,18 @@ int findClosestPoint(const Eigen::VectorXd& current_state,
 }
 
 // 修改预瞄距离计算
-double getPreviewDistance(double velocity, double lateral_error) {
-    const double base_preview = 0.8;   // 进一步减小基础预瞄距离
-    const double velocity_gain = 0.6;  // 降低速度增益
-    const double error_gain = 1.0;    // 增大误差增益
+double getPreviewDistance(double velocity, double lateral_error, bool is_curve) {
+    const double base_preview = is_curve ? 0.5 : 1.0;   // 曲线段时基础预瞄距离更短
+    const double velocity_gain = is_curve ? 0.3 : 0.6;  // 曲线段时速度增益更小
     
-    // 预瞄距离在误差大时更短，使控制更关注近处
+    // 预瞄距离在误差大时更短，在曲线段时显著缩短
     double preview = base_preview + 
                     velocity_gain * std::abs(velocity) * std::exp(-1.0 * lateral_error);
     
-    // 限制预瞄距离的范围
-    return std::max(0.5, std::min(preview, 2.0));
+    // 限制预瞄距离的范围，曲线段时范围更小
+    return is_curve ? 
+           std::max(0.3, std::min(preview, 1.0)) :  // 曲线段
+           std::max(0.5, std::min(preview, 2.0));   // 直线段
 }
 
 int main() {
@@ -168,8 +169,19 @@ int main() {
     
     std::cout << "开始模拟..." << std::endl;
     for(int i = 0; i < sim_steps; i++) {
+        // 检测是否在曲线段
+        bool is_curve = false;
+        if (preview_idx + 1 < reference_path.size()) {
+            double dx = reference_path[preview_idx+1](0) - reference_path[preview_idx](0);
+            double dy = reference_path[preview_idx+1](1) - reference_path[preview_idx](1);
+            double dphi = reference_path[preview_idx+1](2) - reference_path[preview_idx](2);
+            double ds = std::sqrt(dx*dx + dy*dy);
+            double curvature = std::abs(dphi) / (ds + 1e-6);
+            is_curve = (curvature > 0.1);  // 曲率阈值可以调整
+        }
+
         double lateral_error = std::abs(current_state(1));
-        double preview_dist = getPreviewDistance(last_control(0), lateral_error);
+        double preview_dist = getPreviewDistance(last_control(0), lateral_error, is_curve);
         int preview_idx = findClosestPoint(current_state, reference_path, preview_dist);
         
         // 获取从预瞄点开始往前的预测范围内的参考轨迹
