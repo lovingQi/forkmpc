@@ -10,21 +10,16 @@ std::vector<Eigen::VectorXd> generateReferencePath() {
     std::vector<Eigen::VectorXd> reference_path;
     
     // 生成一条更长的直线轨迹 (y = 0)
-    double start_x = -10.0;  // 起点更远
-    double end_x = 30.0;     // 终点更远
-    int points = 200;        // 增加轨迹点数
+    double start_x = -10.0;
+    double end_x = 50.0;     // 延长终点距离
+    int points = 300;        // 增加轨迹点数
     
     for(int i = 0; i < points; i++) {
         Eigen::VectorXd state(3);
-        
-        // x坐标从start_x到end_x均匀分布
         double x = start_x + (end_x - start_x) * i / (points - 1);
-        
-        // 位置 (x, 0)
-        state(0) = x;      // x
-        state(1) = 0.0;    // y = 0 (直线在x轴上)
-        state(2) = 0.0;    // phi = 0 (航向角与x轴平行)
-        
+        state(0) = x;      
+        state(1) = 0.0;    
+        state(2) = 0.0;    
         reference_path.push_back(state);
     }
     
@@ -91,7 +86,7 @@ int main() {
     last_control << 0.0, 0.0;  // 初始速度和转向角都为0
     
     // 4. 模拟控制过程
-    int sim_steps = 200;  // 模拟步数
+    int sim_steps = 400;  // 从200增加到400
     
     std::cout << "开始模拟..." << std::endl;
     for(int i = 0; i < sim_steps; i++) {
