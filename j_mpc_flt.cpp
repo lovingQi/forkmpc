@@ -3,21 +3,21 @@
 
 JMpcFlt::JMpcFlt() {
     // 初始化系统参数
-    dt_ = 0.1;         
-    max_delta_ = 0.7;  // 约40度
-    L_ = 2.7;         
-    max_v_ = 1.0;     
-    rho_ = 1e3;       
+    dt_ = 0.1;
+    max_delta_ = 0.7;
+    L_ = 2.7;
+    max_v_ = 1.0;
+    rho_ = 1e3;
     
     // 调整权重矩阵
     Q_ = Eigen::MatrixXd::Identity(STATE_DIM, STATE_DIM);
-    Q_(0,0) = 10.0;    // x位置误差
-    Q_(1,1) = 200.0;   // y位置误差（适当降低）
-    Q_(2,2) = 150.0;   // 增加航向角误差权重
+    Q_(0,0) = 10.0;       // x位置误差
+    Q_(1,1) = 1200.0;     // 进一步增大y位置误差权重
+    Q_(2,2) = 1000.0;     // 进一步增大航向角误差权重
     
     R_ = Eigen::MatrixXd::Identity(CONTROL_DIM, CONTROL_DIM);
-    R_(0,0) = 5.0;     // 速度增量权重
-    R_(1,1) = 1.0;     // 适当增加转向角增量权重，使转向更平滑
+    R_(0,0) = 0.5;        // 速度增量权重
+    R_(1,1) = 0.01;       // 显著降低转向角增量权重
 }
 
 void JMpcFlt::linearizeModel(
@@ -81,27 +81,33 @@ void JMpcFlt::buildPredictionMatrices(
     Eigen::MatrixXd& Psi,
     Eigen::MatrixXd& Theta) {
     
-    // 构建预测矩阵 (步骤9)
+    // 动态分配矩阵大小
     Psi = Eigen::MatrixXd::Zero(STATE_DIM * Np, AUG_STATE_DIM);
     Theta = Eigen::MatrixXd::Zero(STATE_DIM * Np, CONTROL_DIM * Nc);
     
     // 构建Psi矩阵
     Eigen::MatrixXd temp = Eigen::MatrixXd::Identity(AUG_STATE_DIM, AUG_STATE_DIM);
-    for(int i = 0; i < Np; i++) {
-        temp = A_tilde_seq[i] * temp;
-        Psi.block(i*STATE_DIM, 0, STATE_DIM, AUG_STATE_DIM) = 
-            C_tilde_seq[i] * temp;
+    Psi.block(0, 0, STATE_DIM, AUG_STATE_DIM) = C_tilde_seq[0] * temp;
+    
+    for(int i = 1; i < Np; i++) {
+        temp = A_tilde_seq[i-1] * temp;
+        Psi.block(i*STATE_DIM, 0, STATE_DIM, AUG_STATE_DIM) = C_tilde_seq[i] * temp;
     }
     
     // 构建Theta矩阵
     for(int i = 0; i < Np; i++) {
-        for(int j = 0; j <= std::min(i, Nc-1); j++) {
-            Eigen::MatrixXd temp = Eigen::MatrixXd::Identity(AUG_STATE_DIM, AUG_STATE_DIM);
-            for(int k = i; k > j; k--) {
-                temp = A_tilde_seq[k-1] * temp;
+        for(int j = 0; j < std::min(i+1, Nc); j++) {
+            if (i == j) {
+                Theta.block(i*STATE_DIM, j*CONTROL_DIM, STATE_DIM, CONTROL_DIM) = 
+                    C_tilde_seq[i] * B_tilde_seq[j];
+            } else {
+                Eigen::MatrixXd temp = B_tilde_seq[j];
+                for(int k = j+1; k <= i; k++) {
+                    temp = A_tilde_seq[k-1] * temp;
+                }
+                Theta.block(i*STATE_DIM, j*CONTROL_DIM, STATE_DIM, CONTROL_DIM) = 
+                    C_tilde_seq[i] * temp;
             }
-            Theta.block(i*STATE_DIM, j*CONTROL_DIM, STATE_DIM, CONTROL_DIM) = 
-                C_tilde_seq[i] * temp * B_tilde_seq[j];
         }
     }
 }
@@ -117,24 +123,25 @@ void JMpcFlt::buildQPProblem(
     Eigen::VectorXd& lb,
     Eigen::VectorXd& ub) {
     
-    // 构建二次规划问题 (步骤10)
-    // 1. 构建H矩阵
+    // 动态构建权重矩阵
     Eigen::MatrixXd Q_bar = kroneckerProduct(
         Eigen::MatrixXd::Identity(Np, Np), Q_);
     Eigen::MatrixXd R_bar = kroneckerProduct(
         Eigen::MatrixXd::Identity(Nc, Nc), R_);
     
+    // 确保H矩阵维度正确
     Eigen::MatrixXd H_dense = Theta.transpose() * Q_bar * Theta + R_bar;
     H = H_dense.sparseView();
     
-    // 2. 构建g向量
-    Eigen::VectorXd xi_0(AUG_STATE_DIM);
-    xi_0 << current_state, last_control;
-    
+    // 动态构建参考轨迹向量
     Eigen::VectorXd Y_ref(STATE_DIM * Np);
     for(int i = 0; i < Np; i++) {
         Y_ref.segment(i*STATE_DIM, STATE_DIM) = reference_path[i];
     }
+    
+    // 2. 构建g向量
+    Eigen::VectorXd xi_0(AUG_STATE_DIM);
+    xi_0 << current_state, last_control;
     
     g = Theta.transpose() * Q_bar * (Psi * xi_0 - Y_ref);
     
@@ -147,22 +154,35 @@ void JMpcFlt::buildQPProblem(
     double lateral_error = std::abs(current_state(1));
     double heading_error = std::abs(std::atan2(std::sin(current_state(2)), std::cos(current_state(2))));
     
-    // 速度上限随偏差和航向角误差指数衰减
-    double v_max = 1.0 * std::exp(-0.3 * lateral_error) * std::exp(-0.5 * heading_error);
-    v_max = std::max(0.3, v_max);  // 保持最小速度
+    // 在误差大时更激进地降低速度上限
+    double v_max = 0.8 * std::exp(-1.0 * lateral_error) * std::exp(-1.2 * heading_error);
+    v_max = std::max(0.15, v_max);  // 进一步降低最小速度
     
     // 控制量约束
     for(int i = 0; i < Nc; i++) {
         // 速度约束
-        double v_min = -0.3;  // 允许小幅后退
+        double v_min = -0.15;  // 允许更小的后退速度
         lb(i*CONTROL_DIM) = v_min - last_control(0);
         ub(i*CONTROL_DIM) = v_max - last_control(0);
         
-        // 转向角约束
-        double delta_range = max_delta_ * (0.5 + 0.5 * std::exp(-0.5 * lateral_error));
+        // 转向角约束（更激进的转向策略）
+        double delta_range = max_delta_ * (1.0 - 0.1 * std::exp(-0.1 * lateral_error));
         lb(i*CONTROL_DIM+1) = -delta_range - last_control(1);
         ub(i*CONTROL_DIM+1) = delta_range - last_control(1);
     }
+}
+
+void JMpcFlt::adjustPredictionHorizon(double lateral_error, double curvature) {
+    // 基础预测步长
+    int base_Np = 20;
+    
+    // 根据横向误差和曲率调整预测步长
+    int horizon_adjustment = static_cast<int>(5.0 * std::abs(lateral_error) + 
+                                            10.0 * std::abs(curvature));
+    
+    // 设置新的预测和控制步长（减小调整幅度）
+    Np = std::min(30, base_Np + horizon_adjustment);  // 最大不超过30步
+    Nc = std::min(25, Np - 5);  // 控制步长略小于预测步长
 }
 
 Eigen::VectorXd JMpcFlt::solve(
@@ -170,13 +190,41 @@ Eigen::VectorXd JMpcFlt::solve(
     const std::vector<Eigen::VectorXd>& reference_path,
     const Eigen::VectorXd& last_control) {
     
+    // 首先计算曲率和调整预测步长
+    double curvature = 0;
+    if (reference_path.size() > 2) {
+        int mid = std::min(20, (int)reference_path.size()/2);
+        double dx = reference_path[mid](0) - reference_path[0](0);
+        double dy = reference_path[mid](1) - reference_path[0](1);
+        double dphi = reference_path[mid](2) - reference_path[0](2);
+        double ds = std::sqrt(dx*dx + dy*dy);
+        curvature = std::abs(dphi) / (ds + 1e-6);
+    }
+    
+    // 调整预测步长
+    double lateral_error = std::abs(current_state(1));
+    adjustPredictionHorizon(lateral_error, curvature);
+    
+    // 然后创建本地路径副本并确保长度足够
+    std::vector<Eigen::VectorXd> local_ref_path = reference_path;
+    while (local_ref_path.size() < Np) {
+        local_ref_path.push_back(reference_path.back());
+    }
+    
     // 计算期望控制序列
     std::vector<Eigen::VectorXd> reference_controls(Np);
     for(int i = 0; i < Np-1; i++) {
-        // 计算期望航向角变化率
-        double dphi = reference_path[i+1](2) - reference_path[i](2);
-        // 根据运动学模型反解控制量
-        double v_ref = 0.5;  // 设定一个合理的参考速度
+        // 根据曲率调整参考速度
+        double dx = local_ref_path[i+1](0) - local_ref_path[i](0);
+        double dy = local_ref_path[i+1](1) - local_ref_path[i](1);
+        double dphi = local_ref_path[i+1](2) - local_ref_path[i](2);
+        double ds = std::sqrt(dx*dx + dy*dy);
+        double curvature = std::abs(dphi) / (ds + 1e-6);
+        
+        // 速度随曲率增大而降低
+        double v_ref = 0.8 * std::exp(-2.0 * curvature);
+        v_ref = std::max(0.2, v_ref);
+        
         double delta_ref = atan2(dphi * L_, v_ref * dt_);
         
         Eigen::VectorXd ref_u(CONTROL_DIM);
@@ -192,7 +240,7 @@ Eigen::VectorXd JMpcFlt::solve(
     
     for(int i = 0; i < Np; i++) {
         Eigen::MatrixXd A, B;
-        linearizeModel(reference_path[i], reference_controls[i], A, B);
+        linearizeModel(local_ref_path[i], reference_controls[i], A, B);
         buildAugmentedSystem(A, B, A_tilde_seq[i], B_tilde_seq[i], C_tilde_seq[i]);
     }
     
@@ -204,7 +252,7 @@ Eigen::VectorXd JMpcFlt::solve(
     Eigen::SparseMatrix<double> H;
     Eigen::VectorXd g, lb, ub;
     
-    buildQPProblem(current_state, last_control, reference_path,
+    buildQPProblem(current_state, last_control, local_ref_path,
                    Psi, Theta, H, g, lb, ub);
     
     // 4. 配置OSQP求解器
