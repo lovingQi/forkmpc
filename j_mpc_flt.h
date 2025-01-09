@@ -11,13 +11,16 @@ public:
     JMpcFlt();
     
     // 基本参数定义
-    static const int STATE_DIM = 3;     // [x, y, theta]
-    static const int CONTROL_DIM = 2;   // [V, delta]
-    static const int HORIZON = 20;      // 预测时域
+    static const int STATE_DIM = 3;     // [x, y, phi]
+    static const int CONTROL_DIM = 2;   // [v, delta]
+    static const int AUG_STATE_DIM = STATE_DIM + CONTROL_DIM;  // 增广状态维度
+    static const int Np = 20;           // 预测时域
+    static const int Nc = 10;           // 控制时域
     
     // 主要接口
     Eigen::VectorXd solve(const Eigen::VectorXd& current_state,
-                         const std::vector<Eigen::VectorXd>& reference_path);
+                         const std::vector<Eigen::VectorXd>& reference_path,
+                         const Eigen::VectorXd& last_control);
                          
 private:
     // 系统参数
@@ -25,23 +28,52 @@ private:
     double max_delta_; // 最大转向角
     double L_;         // 轴距
     double max_v_;     // 最大速度
+    double rho_;       // 松弛因子权重
     
     // 权重矩阵
     Eigen::MatrixXd Q_;  // 状态误差权重
-    Eigen::MatrixXd R_;  // 控制输入权重
+    Eigen::MatrixXd R_;  // 控制增量权重
     
-    // 线性化模型
-    Eigen::MatrixXd linearizeModel(const Eigen::VectorXd& reference_state,
-                                  const Eigen::VectorXd& reference_control) const;
+    // 辅助函数 - Kronecker积
+    Eigen::MatrixXd kroneckerProduct(const Eigen::MatrixXd& a, 
+                                    const Eigen::MatrixXd& b) const {
+        Eigen::MatrixXd result(a.rows()*b.rows(), a.cols()*b.cols());
+        for(int i = 0; i < a.rows(); i++)
+            for(int j = 0; j < a.cols(); j++)
+                result.block(i*b.rows(), j*b.cols(), b.rows(), b.cols()) = a(i,j)*b;
+        return result;
+    }
     
-    // 构建QP问题
+    // 1. 计算线性化模型 (步骤2-3)
+    void linearizeModel(const Eigen::VectorXd& reference_state,
+                       const Eigen::VectorXd& reference_control,
+                       Eigen::MatrixXd& A,
+                       Eigen::MatrixXd& B) const;
+                       
+    // 2. 构建增广系统矩阵 (步骤8)
+    void buildAugmentedSystem(const Eigen::MatrixXd& A,
+                             const Eigen::MatrixXd& B,
+                             Eigen::MatrixXd& A_tilde,
+                             Eigen::MatrixXd& B_tilde,
+                             Eigen::MatrixXd& C_tilde);
+                             
+    // 3. 构建预测矩阵 (步骤9)
+    void buildPredictionMatrices(const std::vector<Eigen::MatrixXd>& A_tilde_seq,
+                                const std::vector<Eigen::MatrixXd>& B_tilde_seq,
+                                const std::vector<Eigen::MatrixXd>& C_tilde_seq,
+                                Eigen::MatrixXd& Psi,
+                                Eigen::MatrixXd& Theta);
+    
+    // 4. 构建QP问题 (步骤10)
     void buildQPProblem(const Eigen::VectorXd& current_state,
+                       const Eigen::VectorXd& last_control,
                        const std::vector<Eigen::VectorXd>& reference_path,
-                       Eigen::SparseMatrix<double>& P,
-                       Eigen::VectorXd& q,
-                       Eigen::SparseMatrix<double>& A,
-                       Eigen::VectorXd& l,
-                       Eigen::VectorXd& u);
+                       const Eigen::MatrixXd& Psi,
+                       const Eigen::MatrixXd& Theta,
+                       Eigen::SparseMatrix<double>& H,
+                       Eigen::VectorXd& g,
+                       Eigen::VectorXd& lb,
+                       Eigen::VectorXd& ub);
 };
 
-#endif // J_MPC_FLT_H 
+#endif // J_MPC_FLT_H
