@@ -16,8 +16,8 @@ JMpcFlt::JMpcFlt() {
     Q_(2,2) = 1000.0;    // 航向角误差权重
     
     R_ = Eigen::MatrixXd::Identity(CONTROL_DIM, CONTROL_DIM);
-    R_(0,0) = 10.0;     // 速度增量权重
-    R_(1,1) = 15.0;     // 转向角增量权重
+    R_(0,0) = 1.0;     // 速度增量权重
+    R_(1,1) = 2.0;     // 转向角增量权重
 }
 
 void JMpcFlt::linearizeModel(
@@ -154,9 +154,9 @@ void JMpcFlt::buildQPProblem(
     
     // 4. 设置约束边界
     // 控制量约束
-    const double v_min = -1;      // 速度下限
-    const double v_max = 1;       // 速度上限
-    const double delta_max = 0.436;  // 25度转换为弧度
+    const double v_min = -max_v_;      // 速度下限
+    const double v_max = max_v_;       // 速度上限
+    const double delta_max = max_delta_;  // 25度转换为弧度
     
     // 控制增量约束 (根据图片4.22和4.23)
     const double dv_max = 0.1;      // 速度变化率限制

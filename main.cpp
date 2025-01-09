@@ -80,7 +80,7 @@ int main() {
     
     // 3. 设置初始状态和控制
     Eigen::VectorXd current_state(3);
-    current_state << 0.0, 3.0, -M_PI/6;  // 增大初始横向偏差到3米
+    current_state << 0.0, 2.0, -M_PI/4;  // 增大初始横向偏差到3米
     
     Eigen::VectorXd last_control(2);
     last_control << 0.0, 0.0;  // 初始速度和转向角都为0
