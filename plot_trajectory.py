@@ -2,6 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.animation import FuncAnimation
+import matplotlib.patches as patches
 
 # 读取轨迹数据
 df = pd.read_csv('trajectory.csv')
@@ -38,6 +39,8 @@ ax1.set_ylim(-4, 4)
 # 初始化动态线条
 line_traj, = ax1.plot([], [], 'b-', label='Actual Trajectory')
 point_vehicle, = ax1.plot([], [], 'go', markersize=10, label='Vehicle')
+point_reference, = ax1.plot([], [], 'ro', markersize=8, label='Reference Point')  # 添加参考点
+preview_line, = ax1.plot([], [], 'g--', alpha=0.5, label='Preview Line')  # 添加预瞄线
 arrow_vehicle = ax1.arrow(0, 0, 0, 0, head_width=0.1, head_length=0.2, fc='g', ec='g')
 
 line_heading, = ax2.plot([], [], 'g-')
@@ -70,18 +73,122 @@ text_steer = ax4.text(0.02, 0.95, '', transform=ax4.transAxes)
 
 ax1.legend()
 
+# 添加叉车车体绘制函数
+def draw_forklift(ax, x, y, theta, steer_angle, color='g'):
+    # 车体参数（单位：米）
+    length = 2.7  # 车长
+    width = 1.0   # 车宽
+    wheel_radius = 0.2  # 车轮半径
+    
+    # 计算车体四个角的位置（相对于车体中心）
+    corners = np.array([
+        [-length/2, -width/2],
+        [length/2, -width/2],
+        [length/2, width/2],
+        [-length/2, width/2]
+    ])
+    
+    # 旋转矩阵
+    rot = np.array([
+        [np.cos(theta), -np.sin(theta)],
+        [np.sin(theta), np.cos(theta)]
+    ])
+    
+    # 转换到全局坐标系
+    corners = np.dot(corners, rot.T)
+    corners = corners + np.array([x, y])
+    
+    # 绘制车体
+    if hasattr(draw_forklift, 'body'):
+        draw_forklift.body.remove()
+    draw_forklift.body = patches.Polygon(corners, color=color, alpha=0.3)
+    ax.add_patch(draw_forklift.body)
+    
+    # 绘制舵轮（前轮）
+    front_pos = np.dot([length/2, 0], rot.T) + np.array([x, y])
+    if hasattr(draw_forklift, 'wheel'):
+        draw_forklift.wheel.remove()
+    
+    # 舵轮形状
+    wheel_length = 0.4
+    wheel_width = 0.1
+    wheel_corners = np.array([
+        [-wheel_length/2, -wheel_width/2],
+        [wheel_length/2, -wheel_width/2],
+        [wheel_length/2, wheel_width/2],
+        [-wheel_length/2, wheel_width/2]
+    ])
+    
+    # 舵轮旋转矩阵（考虑车体方向和转向角）
+    wheel_rot = np.array([
+        [np.cos(theta + steer_angle), -np.sin(theta + steer_angle)],
+        [np.sin(theta + steer_angle), np.cos(theta + steer_angle)]
+    ])
+    
+    wheel_corners = np.dot(wheel_corners, wheel_rot.T)
+    wheel_corners = wheel_corners + front_pos
+    
+    draw_forklift.wheel = patches.Polygon(wheel_corners, color='blue', alpha=0.8)
+    ax.add_patch(draw_forklift.wheel)
+    
+    # 绘制后轮（固定轮）
+    rear_pos = np.dot([-length/2, 0], rot.T) + np.array([x, y])
+    if hasattr(draw_forklift, 'rear_wheel'):
+        draw_forklift.rear_wheel.remove()
+    
+    rear_wheel_corners = np.array([
+        [-wheel_length/2, -wheel_width/2],
+        [wheel_length/2, -wheel_width/2],
+        [wheel_length/2, wheel_width/2],
+        [-wheel_length/2, wheel_width/2]
+    ])
+    
+    rear_wheel_corners = np.dot(rear_wheel_corners, rot.T)
+    rear_wheel_corners = rear_wheel_corners + rear_pos
+    
+    draw_forklift.rear_wheel = patches.Polygon(rear_wheel_corners, color='black', alpha=0.8)
+    ax.add_patch(draw_forklift.rear_wheel)
+
 def init():
     line_traj.set_data([], [])
     point_vehicle.set_data([], [])
+    point_reference.set_data([], [])  # 初始化参考点
+    preview_line.set_data([], [])     # 初始化预瞄线
     line_heading.set_data([], [])
     line_speed.set_data([], [])
     line_steer.set_data([], [])
-    return line_traj, point_vehicle, line_heading, line_speed, line_steer
+    return line_traj, point_vehicle, point_reference, preview_line, line_heading, line_speed, line_steer
 
 def update(frame):
     # 更新轨迹
     line_traj.set_data(x[:frame], y[:frame])
     point_vehicle.set_data(x[frame], y[frame])
+    
+    # 计算最近参考点
+    current_pos = np.array([x[frame], y[frame]])
+    ref_points = np.column_stack((x_ref, y_ref))
+    distances = np.linalg.norm(ref_points - current_pos, axis=1)
+    closest_idx = np.argmin(distances)
+    
+    # 计算预瞄点（基于当前速度）
+    preview_dist = 2.0 + 2.0 * abs(speed[frame])  # 基础预瞄距离 + 速度相关预瞄距离
+    preview_idx = closest_idx
+    accumulated_dist = 0.0
+    while preview_idx < len(x_ref) - 1 and accumulated_dist < preview_dist:
+        dx = x_ref[preview_idx + 1] - x_ref[preview_idx]
+        dy = y_ref[preview_idx + 1] - y_ref[preview_idx]
+        accumulated_dist += np.sqrt(dx*dx + dy*dy)
+        preview_idx += 1
+    
+    # 更新参考点显示
+    point_reference.set_data(x_ref[preview_idx], y_ref[preview_idx])
+    
+    # 更新预瞄线（从车辆到预瞄点）
+    preview_line.set_data([x[frame], x_ref[preview_idx]], 
+                         [y[frame], y_ref[preview_idx]])
+    
+    # 绘制叉车车体和舵轮
+    draw_forklift(ax1, x[frame], y[frame], theta[frame], steer[frame])
     
     # 更新车辆方向箭头
     if hasattr(update, 'arrow'):
@@ -109,7 +216,7 @@ def update(frame):
             ax.time_line.remove()
         ax.time_line = ax.axvline(time[frame], color='r', linestyle='--', alpha=0.5)
     
-    return line_traj, point_vehicle, line_heading, line_speed, line_steer
+    return line_traj, point_vehicle, point_reference, preview_line, line_heading, line_speed, line_steer
 
 # 创建动画，降低interval使动画更流畅
 anim = FuncAnimation(fig, update, frames=len(df), 
