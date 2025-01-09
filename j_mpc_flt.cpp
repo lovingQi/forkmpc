@@ -3,21 +3,21 @@
 
 JMpcFlt::JMpcFlt() {
     // 初始化系统参数
-    dt_ = 0.1;         // 采样时间100ms
-    max_delta_ = 0.7;  // 最大转向角 40度
-    L_ = 2.7;         // 轴距
-    max_v_ = 1.0;     // 最大速度
-    rho_ = 1e3;       // 松弛因子权重
+    dt_ = 0.1;         
+    max_delta_ = 0.7;  // 约40度
+    L_ = 2.7;         
+    max_v_ = 1.0;     
+    rho_ = 1e3;       
     
-    // 初始化权重矩阵
+    // 调整权重矩阵
     Q_ = Eigen::MatrixXd::Identity(STATE_DIM, STATE_DIM);
-    Q_(0,0) = 100.0;  // x位置误差权重
-    Q_(1,1) = 100.0;  // y位置误差权重
-    Q_(2,2) = 50.0;   // 航向角误差权重
+    Q_(0,0) = 10.0;    // x位置误差
+    Q_(1,1) = 500.0;   // y位置误差（大幅增加横向跟踪权重）
+    Q_(2,2) = 100.0;   // 航向角误差
     
     R_ = Eigen::MatrixXd::Identity(CONTROL_DIM, CONTROL_DIM);
-    R_(0,0) = 1.0;    // 速度增量权重
-    R_(1,1) = 10.0;   // 转向角增量权重
+    R_(0,0) = 1.0;     // 速度增量权重
+    R_(1,1) = 0.1;     // 转向角增量权重（降低以允许更灵活的转向）
 }
 
 void JMpcFlt::linearizeModel(
@@ -27,23 +27,25 @@ void JMpcFlt::linearizeModel(
     Eigen::MatrixXd& B) const {
     
     // 提取参考状态和控制
+    double x_ref = reference_state(0);
+    double y_ref = reference_state(1);
     double phi_ref = reference_state(2);
     double v_ref = reference_control(0);
     double delta_ref = reference_control(1);
     
-    // 计算雅可比矩阵A
+    // 计算雅可比矩阵A = ∂f/∂x
     A = Eigen::MatrixXd::Zero(STATE_DIM, STATE_DIM);
-    A(0,2) = -v_ref * sin(phi_ref);
-    A(1,2) = v_ref * cos(phi_ref);
+    A(0,2) = -v_ref * sin(phi_ref);  // ∂ẋ/∂φ
+    A(1,2) = v_ref * cos(phi_ref);   // ∂ẏ/∂φ
     
-    // 计算雅可比矩阵B
+    // 计算雅可比矩阵B = ∂f/∂u
     B = Eigen::MatrixXd::Zero(STATE_DIM, CONTROL_DIM);
-    B(0,0) = cos(phi_ref);
-    B(1,0) = sin(phi_ref);
-    B(2,0) = tan(delta_ref) / L_;
-    B(2,1) = v_ref / (L_ * pow(cos(delta_ref), 2));
+    B(0,0) = cos(phi_ref);           // ∂ẋ/∂v
+    B(1,0) = sin(phi_ref);           // ∂ẏ/∂v
+    B(2,0) = tan(delta_ref) / L_;    // ∂φ̇/∂v
+    B(2,1) = v_ref / (L_ * pow(cos(delta_ref), 2));  // ∂φ̇/∂δ
     
-    // 离散化 (步骤5)
+    // 离散化
     A = Eigen::MatrixXd::Identity(STATE_DIM, STATE_DIM) + dt_ * A;
     B = dt_ * B;
 }
@@ -138,15 +140,20 @@ void JMpcFlt::buildQPProblem(
     
     // 3. 设置约束
     const int n_du = CONTROL_DIM * Nc;
-    lb = Eigen::VectorXd::Constant(n_du, -0.1);  // 控制增量下界
-    ub = Eigen::VectorXd::Constant(n_du, 0.1);   // 控制增量上界
+    lb = Eigen::VectorXd::Constant(n_du, -0.5);  
+    ub = Eigen::VectorXd::Constant(n_du, 0.5);   
     
-    // 考虑实际控制约束
+    // 控制量约束
     for(int i = 0; i < Nc; i++) {
-        lb(i*CONTROL_DIM) = -max_v_ - last_control(0);     // 速度下界
-        ub(i*CONTROL_DIM) = max_v_ - last_control(0);      // 速度上界
-        lb(i*CONTROL_DIM+1) = -max_delta_ - last_control(1); // 转向角下界
-        ub(i*CONTROL_DIM+1) = max_delta_ - last_control(1);  // 转向角上界
+        // 速度约束
+        double v_min = -0.5;  // 允许小幅后退
+        double v_max = 1.0;   // 最大前进速度
+        lb(i*CONTROL_DIM) = v_min - last_control(0);
+        ub(i*CONTROL_DIM) = v_max - last_control(0);
+        
+        // 转向角约束
+        lb(i*CONTROL_DIM+1) = -max_delta_ - last_control(1);
+        ub(i*CONTROL_DIM+1) = max_delta_ - last_control(1);
     }
 }
 
@@ -155,15 +162,29 @@ Eigen::VectorXd JMpcFlt::solve(
     const std::vector<Eigen::VectorXd>& reference_path,
     const Eigen::VectorXd& last_control) {
     
-    // 1. 计算线性化模型和增广系统
+    // 计算期望控制序列
+    std::vector<Eigen::VectorXd> reference_controls(Np);
+    for(int i = 0; i < Np-1; i++) {
+        // 计算期望航向角变化率
+        double dphi = reference_path[i+1](2) - reference_path[i](2);
+        // 根据运动学模型反解控制量
+        double v_ref = 0.5;  // 设定一个合理的参考速度
+        double delta_ref = atan2(dphi * L_, v_ref * dt_);
+        
+        Eigen::VectorXd ref_u(CONTROL_DIM);
+        ref_u << v_ref, delta_ref;
+        reference_controls[i] = ref_u;
+    }
+    reference_controls[Np-1] = reference_controls[Np-2];
+    
+    // 线性化和预测
     std::vector<Eigen::MatrixXd> A_tilde_seq(Np);
     std::vector<Eigen::MatrixXd> B_tilde_seq(Np);
     std::vector<Eigen::MatrixXd> C_tilde_seq(Np);
     
     for(int i = 0; i < Np; i++) {
         Eigen::MatrixXd A, B;
-        linearizeModel(reference_path[i], 
-                      Eigen::VectorXd::Zero(CONTROL_DIM), A, B);
+        linearizeModel(reference_path[i], reference_controls[i], A, B);
         buildAugmentedSystem(A, B, A_tilde_seq[i], B_tilde_seq[i], C_tilde_seq[i]);
     }
     
