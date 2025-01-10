@@ -127,7 +127,7 @@ int main() {
         
         current_state(0) += v * cos(phi) * dt;
         current_state(1) += v * sin(phi) * dt;
-        current_state(2) += v * tan(delta) / 2.7 * dt;  // 2.7是轴距
+        current_state(2) += v * tan(delta) / 0.97 * dt;  // 0.97是轴距
         
         // 更新上一时刻控制量
         last_control = control;

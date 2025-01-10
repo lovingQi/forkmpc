@@ -5,7 +5,7 @@ JMpcFlt::JMpcFlt() {
     // 初始化系统参数
     dt_ = 0.1;         
     max_delta_ = 0.436;  // 25度，根据图片中的约束
-    L_ = 2.7;         
+    L_ = 0.97;         
     max_v_ = 1.0;     
     rho_ = 1e3;       
     
@@ -16,8 +16,8 @@ JMpcFlt::JMpcFlt() {
     Q_(2,2) = 1000.0;    // 航向角误差权重
     
     R_ = Eigen::MatrixXd::Identity(CONTROL_DIM, CONTROL_DIM);
-    R_(0,0) = 1.0;     // 速度增量权重
-    R_(1,1) = 2.0;     // 转向角增量权重
+    R_(0,0) = 2.0;     // 速度增量权重
+    R_(1,1) = 1.0;     // 转向角增量权重
 }
 
 void JMpcFlt::linearizeModel(
@@ -233,8 +233,32 @@ Eigen::VectorXd JMpcFlt::solve(
     std::vector<Eigen::VectorXd> reference_controls(Np);
     
     // 根据横向误差和航向误差动态调整参考速度
-    double lateral_error = std::abs(current_state(1));
-    double heading_error = std::abs(std::atan2(std::sin(current_state(2)), std::cos(current_state(2))));
+    // 找到最近的参考点和实际使用的参考点
+    int closest_idx = 0;
+    double min_dist = std::numeric_limits<double>::max();
+    for(int i = 0; i < reference_path.size(); i++) {
+        double dx = current_state(0) - reference_path[i](0);
+        double dy = current_state(1) - reference_path[i](1);
+        double dist = dx*dx + dy*dy;
+        if(dist < min_dist) {
+            min_dist = dist;
+            closest_idx = i;
+        }
+    }
+    
+    // 计算参考线方向
+    double dx = reference_path[closest_idx+1](0) - reference_path[closest_idx](0);
+    double dy = reference_path[closest_idx+1](1) - reference_path[closest_idx](1);
+    double path_angle = std::atan2(dy, dx);
+    
+    // 计算车辆位置到参考线的垂直距离(横向误差)
+    double lateral_error = std::abs((current_state(1) - reference_path[closest_idx](1)) * std::cos(path_angle) - 
+                                  (current_state(0) - reference_path[closest_idx](0)) * std::sin(path_angle));
+    
+    // 计算航向误差(车辆朝向与参考线方向的夹角)
+    double heading_error = std::abs(current_state(2) - path_angle);
+    // 归一化到[-pi,pi]
+    heading_error = std::atan2(std::sin(heading_error), std::cos(heading_error));
     
     // 参考速度随误差指数衰减
     double v_ref = 0.2 * std::exp(-0.3 * lateral_error) * std::exp(-0.5 * heading_error);
