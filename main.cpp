@@ -29,7 +29,7 @@ std::vector<Eigen::VectorXd> generateReferencePath() {
 // 修改找最近点的函数，增加预瞄距离
 int findClosestPoint(const Eigen::VectorXd& current_state, 
                     const std::vector<Eigen::VectorXd>& reference_path,
-                    double preview_distance = 3.0) {  // 增加预瞄距离参数
+                    double preview_distance = 0.5) {  // 减小这个默认值，比如改为0.5
     int closest_idx = 0;
     double min_dist = std::numeric_limits<double>::max();
     
@@ -62,9 +62,9 @@ int findClosestPoint(const Eigen::VectorXd& current_state,
 
 // 修改预瞄距离计算
 double getPreviewDistance(double velocity) {
-    const double base_preview = 0.5;  // 基础预瞄距离
-    const double velocity_gain = 2.0;  // 速度增益
-    return base_preview + velocity_gain * std::abs(velocity);  // 预瞄距离随速度增加
+    const double base_preview = 0.05;  // 减小基础预瞄距离，比如改为0.05
+    const double velocity_gain = 0.05; // 减小速度增益，比如改为0.05
+    return base_preview + velocity_gain * std::abs(velocity);
 }
 
 int main() {

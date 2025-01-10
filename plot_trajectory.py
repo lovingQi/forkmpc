@@ -171,7 +171,7 @@ def update(frame):
     closest_idx = np.argmin(distances)
     
     # 计算预瞄点（基于当前速度）
-    preview_dist = 2.0 + 2.0 * abs(speed[frame])  # 基础预瞄距离 + 速度相关预瞄距离
+    preview_dist = 0.05 + 0.05 * abs(speed[frame])  # 修改为与C++相同的参数
     preview_idx = closest_idx
     accumulated_dist = 0.0
     while preview_idx < len(x_ref) - 1 and accumulated_dist < preview_dist:
