@@ -8,13 +8,15 @@ import matplotlib.patches as patches
 df = pd.read_csv('trajectory.csv')
 
 # 创建图形
-fig = plt.figure(figsize=(15, 12))  # 增加图形高度以容纳更多子图
+fig = plt.figure(figsize=(15, 18))  # 增加图形高度以容纳6张图
 
 # 设置子图
-ax1 = plt.subplot(2, 2, 1)  # 轨迹
-ax2 = plt.subplot(2, 2, 2)  # 航向角
-ax3 = plt.subplot(2, 2, 3)  # 速度
-ax4 = plt.subplot(2, 2, 4)  # 转向角
+ax1 = plt.subplot(3, 2, 1)  # 轨迹
+ax2 = plt.subplot(3, 2, 2)  # 航向角
+ax3 = plt.subplot(3, 2, 3)  # 速度
+ax4 = plt.subplot(3, 2, 4)  # 转向角
+ax5 = plt.subplot(3, 2, 5)  # lateral error
+ax6 = plt.subplot(3, 2, 6)  # heading error
 
 # 转换数据为numpy数组
 x = df['x'].to_numpy()
@@ -73,9 +75,21 @@ t = np.linspace(0, 1, density)
 x_ref.extend(5 - t * 15)
 y_ref.extend(np.full_like(t, 15))
 
+# 在生成参考路径后，计算参考航向角
+theta_ref = np.zeros_like(x_ref)
+for i in range(1, len(x_ref)-1):
+    dx = x_ref[i+1] - x_ref[i-1]
+    dy = y_ref[i+1] - y_ref[i-1]
+    theta_ref[i] = np.arctan2(dy, dx)
+
+# 处理首尾点的航向角
+theta_ref[0] = theta_ref[1]
+theta_ref[-1] = theta_ref[-2]
+
 # 转换为numpy数组
 x_ref = np.array(x_ref)
 y_ref = np.array(y_ref)
+theta_ref = np.array(theta_ref)  # 确保theta_ref也是numpy数组
 # 绘制参考轨迹（固定的）
 
 ax1.plot(x_ref, y_ref, 'r--', label='Reference Path')
@@ -261,8 +275,55 @@ def update(frame):
     text_speed.set_text(f'Current: {speed[frame]:.2f} m/s')
     text_steer.set_text(f'Current: {np.degrees(steer[frame]):.1f}°')
     
+    # 计算误差
+    lateral_errors = []
+    heading_errors = []
+    for i in range(frame + 1):
+        # 找到最近参考点
+        current_pos = np.array([x[i], y[i]])
+        ref_points = np.column_stack((x_ref, y_ref))
+        distances = np.linalg.norm(ref_points - current_pos, axis=1)
+        closest_idx = np.argmin(distances)
+        
+        # 计算参考线方向
+        path_angle = theta_ref[closest_idx]  # 直接使用参考点的航向角
+        
+        # 计算横向误差 (转换为毫米)
+        lateral_error = abs((y[i] - y_ref[closest_idx]) * np.cos(path_angle) - 
+                          (x[i] - x_ref[closest_idx]) * np.sin(path_angle)) * 1000
+        
+        # 计算航向误差 (转换为度)
+        heading_error = abs(theta[i] - path_angle)
+        heading_error = np.arctan2(np.sin(heading_error), np.cos(heading_error))
+        heading_error = np.degrees(heading_error)
+        
+        lateral_errors.append(lateral_error)
+        heading_errors.append(heading_error)
+    
+    # 更新横向误差图
+    ax5.clear()
+    ax5.grid(True)
+    ax5.plot(time[:frame+1], lateral_errors, 'b-')
+    ax5.set_xlabel('Time (s)')
+    ax5.set_ylabel('Lateral Error (mm)')
+    ax5.set_title('Lateral Tracking Error')
+    if frame > 0:
+        ax5.text(0.02, 0.95, f'Current: {lateral_errors[-1]:.1f} mm', 
+                transform=ax5.transAxes)
+    
+    # 更新航向误差图
+    ax6.clear()
+    ax6.grid(True)
+    ax6.plot(time[:frame+1], heading_errors, 'r-')
+    ax6.set_xlabel('Time (s)')
+    ax6.set_ylabel('Heading Error (deg)')
+    ax6.set_title('Heading Tracking Error')
+    if frame > 0:
+        ax6.text(0.02, 0.95, f'Current: {heading_errors[-1]:.1f}°', 
+                transform=ax6.transAxes)
+    
     # 添加垂直线表示当前时间点
-    for ax in [ax2, ax3, ax4]:
+    for ax in [ax2, ax3, ax4, ax5, ax6]:
         if hasattr(ax, 'time_line'):
             ax.time_line.remove()
         ax.time_line = ax.axvline(time[frame], color='r', linestyle='--', alpha=0.5)
@@ -274,5 +335,5 @@ anim = FuncAnimation(fig, update, frames=len(df),
                     init_func=init, interval=20,  # 20ms per frame
                     blit=False, repeat=True)  # 允许重复播放
 
-plt.tight_layout()
+plt.tight_layout()  # 调整子图间距
 plt.show() 
