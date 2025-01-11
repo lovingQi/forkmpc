@@ -6,6 +6,8 @@
 #include <vector>
 #include <osqp/osqp.h>
 
+// 在类定义前添加结构体声明
+
 class JMpcFlt {
 public:
     JMpcFlt();
@@ -21,6 +23,10 @@ public:
     Eigen::VectorXd solve(const Eigen::VectorXd& current_state,
                          const std::vector<Eigen::VectorXd>& reference_path,
                          const Eigen::VectorXd& last_control);
+    struct TrackingErrors {
+    double lateral_error;
+    double heading_error;
+};
                          
 private:
     // 系统参数
@@ -74,6 +80,10 @@ private:
                        Eigen::VectorXd& g,
                        Eigen::VectorXd& lb,
                        Eigen::VectorXd& ub);
+                       
+    // 添加函数声明
+    TrackingErrors calculateTrackingErrors(
+        const Eigen::VectorXd& current_state,
+        const Eigen::VectorXd& reference_state);
 };
-
 #endif // J_MPC_FLT_H

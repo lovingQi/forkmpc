@@ -184,15 +184,12 @@ void JMpcFlt::buildQPProblem(
         u_ub << v_max, delta_max;
         
         // 考虑当前状态调整约束
-        double lateral_error = std::abs(current_state(1));
-        double heading_error = std::abs(std::atan2(std::sin(current_state(2)), std::cos(current_state(2))));
-        
-        // 根据误差调整速度上限
-        u_ub(0) = v_max * std::exp(-0.3 * lateral_error) * std::exp(-0.5 * heading_error);
+        auto errors = calculateTrackingErrors(current_state, reference_path[i]);
+        u_ub(0) = v_max * std::exp(-0.3 * errors.lateral_error) * std::exp(-0.5 * errors.heading_error);
         u_ub(0) = std::max(0.3, u_ub(0));
         
         // 根据误差调整转向角范围
-        double delta_range = delta_max * (0.5 + 0.5 * std::exp(-0.5 * lateral_error));
+        double delta_range = delta_max * (0.5 + 0.5 * std::exp(-0.5 * errors.lateral_error));
         u_lb(1) = -delta_range;
         u_ub(1) = delta_range;
         
@@ -261,7 +258,8 @@ Eigen::VectorXd JMpcFlt::solve(
     heading_error = std::atan2(std::sin(heading_error), std::cos(heading_error));
     
     // 参考速度随误差指数衰减
-    double v_ref = 0.2 * std::exp(-0.3 * lateral_error) * std::exp(-0.5 * heading_error);
+    auto errors = calculateTrackingErrors(current_state, reference_path[closest_idx]);
+    double v_ref = 0.2 * std::exp(-0.3 * errors.lateral_error) * std::exp(-0.5 * errors.heading_error);
     v_ref = std::max(0.05, v_ref);  // 保持最小速度
     
     for(int i = 0; i < Np-1; i++) {
@@ -359,4 +357,22 @@ Eigen::VectorXd JMpcFlt::solve(
     c_free(settings);
     
     return control;
+} 
+
+
+JMpcFlt::TrackingErrors JMpcFlt::calculateTrackingErrors(
+    const Eigen::VectorXd& current_state,
+    const Eigen::VectorXd& reference_state) {
+    // 计算参考线方向
+    double path_angle = reference_state(2);
+    
+    // 计算横向误差
+    double lateral_error = std::abs((current_state(1) - reference_state(1)) * std::cos(path_angle) - 
+                                  (current_state(0) - reference_state(0)) * std::sin(path_angle));
+    
+    // 计算航向误差
+    double heading_error = std::abs(current_state(2) - path_angle);
+    heading_error = std::atan2(std::sin(heading_error), std::cos(heading_error));
+    
+    return {lateral_error, heading_error};
 } 
