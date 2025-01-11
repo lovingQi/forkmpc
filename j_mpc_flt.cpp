@@ -11,8 +11,8 @@ JMpcFlt::JMpcFlt() {
     
     // 调整权重矩阵
     Q_ = Eigen::MatrixXd::Identity(STATE_DIM, STATE_DIM);
-    Q_(0,0) = 2000.0;    // x位置误差
-    Q_(1,1) = 2000.0;    // y位置误差
+    Q_(0,0) = 3000.0;    // x位置误差
+    Q_(1,1) = 3000.0;    // y位置误差
     Q_(2,2) = 250.0;    // 航向角误差权重
     
     R_ = Eigen::MatrixXd::Identity(CONTROL_DIM, CONTROL_DIM);
@@ -185,7 +185,7 @@ void JMpcFlt::buildQPProblem(
         
         // 考虑当前状态调整约束
         auto errors = calculateTrackingErrors(current_state, reference_path[i]);
-        u_ub(0) = v_max * std::exp(-0.3 * errors.lateral_error) * std::exp(-0.5 * errors.heading_error);
+        u_ub(0) = v_max * std::exp(-3 * errors.lateral_error) * std::exp(-0.5 * errors.heading_error);
         u_ub(0) = std::max(0.3, u_ub(0));
         
         // 根据误差调整转向角范围
@@ -259,7 +259,7 @@ Eigen::VectorXd JMpcFlt::solve(
     
     // 参考速度随误差指数衰减
     auto errors = calculateTrackingErrors(current_state, reference_path[closest_idx]);
-    double v_ref = 0.2 * std::exp(-0.3 * errors.lateral_error) * std::exp(-0.5 * errors.heading_error);
+    double v_ref = 0.2 * std::exp(-3 * errors.lateral_error) * std::exp(-0.5 * errors.heading_error);
     v_ref = std::max(0.05, v_ref);  // 保持最小速度
     
     for(int i = 0; i < Np-1; i++) {

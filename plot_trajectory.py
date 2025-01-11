@@ -141,9 +141,18 @@ ax1.legend()
 # 添加叉车车体绘制函数
 def draw_forklift(ax, x, y, theta, steer_angle, color='g'):
     # 车体参数（单位：米）
-    length = 2.7  # 车长
-    width = 1.0   # 车宽
-    wheel_radius = 0.2  # 车轮半径
+    length = 1.4     # 车长
+    width = 0.6      # 车宽
+    wheelbase = 0.97 # 轴距（后轮到前轮的距离）
+    rear_overhang = 0.3  # 后悬（后轮到车尾的距离）
+    
+    # 计算后轮位置（当前x,y是后轮位置）
+    rear_pos = np.array([x, y])
+    
+    # 计算车体中心位置（从后轮向前wheelbase/2，再向后rear_overhang/2）
+    center_offset = (wheelbase/2 - rear_overhang/2)
+    center_x = x + center_offset * np.cos(theta)
+    center_y = y + center_offset * np.sin(theta)
     
     # 计算车体四个角的位置（相对于车体中心）
     corners = np.array([
@@ -161,7 +170,7 @@ def draw_forklift(ax, x, y, theta, steer_angle, color='g'):
     
     # 转换到全局坐标系
     corners = np.dot(corners, rot.T)
-    corners = corners + np.array([x, y])
+    corners = corners + np.array([center_x, center_y])
     
     # 绘制车体
     if hasattr(draw_forklift, 'body'):
@@ -169,14 +178,16 @@ def draw_forklift(ax, x, y, theta, steer_angle, color='g'):
     draw_forklift.body = patches.Polygon(corners, color=color, alpha=0.3)
     ax.add_patch(draw_forklift.body)
     
-    # 绘制舵轮（前轮）
-    front_pos = np.dot([length/2, 0], rot.T) + np.array([x, y])
+    # 绘制前轮（转向轮）
+    front_x = x + wheelbase * np.cos(theta)
+    front_y = y + wheelbase * np.sin(theta)
+    
     if hasattr(draw_forklift, 'wheel'):
         draw_forklift.wheel.remove()
     
-    # 舵轮形状
-    wheel_length = 0.4
-    wheel_width = 0.1
+    # 前轮形状
+    wheel_length = 0.2
+    wheel_width = 0.08
     wheel_corners = np.array([
         [-wheel_length/2, -wheel_width/2],
         [wheel_length/2, -wheel_width/2],
@@ -184,20 +195,19 @@ def draw_forklift(ax, x, y, theta, steer_angle, color='g'):
         [-wheel_length/2, wheel_width/2]
     ])
     
-    # 舵轮旋转矩阵（考虑车体方向和转向角）
+    # 前轮旋转矩阵（考虑车体方向和转向角）
     wheel_rot = np.array([
         [np.cos(theta + steer_angle), -np.sin(theta + steer_angle)],
         [np.sin(theta + steer_angle), np.cos(theta + steer_angle)]
     ])
     
     wheel_corners = np.dot(wheel_corners, wheel_rot.T)
-    wheel_corners = wheel_corners + front_pos
+    wheel_corners = wheel_corners + np.array([front_x, front_y])
     
     draw_forklift.wheel = patches.Polygon(wheel_corners, color='blue', alpha=0.8)
     ax.add_patch(draw_forklift.wheel)
     
-    # 绘制后轮（固定轮）
-    rear_pos = np.dot([-length/2, 0], rot.T) + np.array([x, y])
+    # 绘制后轮
     if hasattr(draw_forklift, 'rear_wheel'):
         draw_forklift.rear_wheel.remove()
     

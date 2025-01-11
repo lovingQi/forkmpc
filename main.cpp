@@ -132,8 +132,8 @@ int findClosestPoint(const Eigen::VectorXd& current_state,
 
 // 修改预瞄距离计算
 double getPreviewDistance(double velocity) {
-    const double base_preview = 0.05;  // 减小基础预瞄距离，比如改为0.05
-    const double velocity_gain = 0.05; // 减小速度增益，比如改为0.05
+    const double base_preview = 0.5;  // 减小基础预瞄距离，比如改为0.05
+    const double velocity_gain = 0.5; // 减小速度增益，比如改为0.05
     return base_preview + velocity_gain * std::abs(velocity);
 }
 
