@@ -189,7 +189,8 @@ void JMpcFlt::buildQPProblem(
         u_ub(0) = std::max(0.3, u_ub(0));
         
         // 根据误差调整转向角范围
-        double delta_range = delta_max * (0.5 + 0.5 * std::exp(-0.5 * errors.lateral_error));
+        double delta_range = delta_max * (0.2 + 0.4 * errors.lateral_error + 0.4 * errors.heading_error);
+        delta_range = std::min(delta_range, delta_max);  // 确保不超过最大转向角
         u_lb(1) = -delta_range;
         u_ub(1) = delta_range;
         
@@ -366,13 +367,16 @@ JMpcFlt::TrackingErrors JMpcFlt::calculateTrackingErrors(
     // 计算参考线方向
     double path_angle = reference_state(2);
     
-    // 计算横向误差
+    // 计算横向误差并归一化
     double lateral_error = std::abs((current_state(1) - reference_state(1)) * std::cos(path_angle) - 
                                   (current_state(0) - reference_state(0)) * std::sin(path_angle));
+    const double max_lateral_error = 2.0;  // 设定最大横向误差（米）
+    lateral_error = std::min(lateral_error / max_lateral_error, 1.0);  // 归一化到[0,1]
     
-    // 计算航向误差
+    // 计算航向误差并归一化
     double heading_error = std::abs(current_state(2) - path_angle);
     heading_error = std::atan2(std::sin(heading_error), std::cos(heading_error));
+    heading_error = std::min(std::abs(heading_error) / M_PI, 1.0);  // 归一化到[0,1]
     
     return {lateral_error, heading_error};
 } 
