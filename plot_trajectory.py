@@ -8,7 +8,7 @@ import matplotlib.patches as patches
 df = pd.read_csv('trajectory.csv')
 
 # 创建图形
-fig = plt.figure(figsize=(15, 10))
+fig = plt.figure(figsize=(15, 12))  # 增加图形高度以容纳更多子图
 
 # 设置子图
 ax1 = plt.subplot(2, 2, 1)  # 轨迹
@@ -23,18 +23,69 @@ theta = df['theta'].to_numpy()
 speed = df['speed'].to_numpy()
 steer = df['steer'].to_numpy()
 time = np.arange(len(df)) * 0.1
+def cubic_bezier(p0, p1, p2, p3, t):
+    t2 = t * t
+    t3 = t2 * t
+    mt = 1 - t
+    mt2 = mt * mt
+    mt3 = mt2 * mt
+    return p0 * mt3 + p1 * (3 * mt2 * t) + p2 * (3 * mt * t2) + p3 * t3
 
+# 生成参考路径点
+density = 500
+x_ref = []
+y_ref = []
+
+# 第一段：直线
+t = np.linspace(0, 1, density)
+x_ref.extend(-10 + t * 10)
+y_ref.extend(np.zeros_like(t))
+
+# 第二段：右转弯（贝塞尔曲线）
+p0 = np.array([0, 0])
+p1 = np.array([5, 0])
+p2 = np.array([10, 2])
+p3 = np.array([10, 5])
+
+for t in np.linspace(0, 1, density):
+    point = cubic_bezier(p0, p1, p2, p3, t)
+    x_ref.append(point[0])
+    y_ref.append(point[1])
+
+# 第三段：直线
+t = np.linspace(0, 1, density)
+x_ref.extend(np.full_like(t, 10))
+y_ref.extend(5 + t * 5)
+
+# 第四段：左转弯
+p0 = np.array([10, 10])
+p1 = np.array([10, 13])
+p2 = np.array([8, 15])
+p3 = np.array([5, 15])
+
+for t in np.linspace(0, 1, density):
+    point = cubic_bezier(p0, p1, p2, p3, t)
+    x_ref.append(point[0])
+    y_ref.append(point[1])
+
+# 第五段：直线
+t = np.linspace(0, 1, density)
+x_ref.extend(5 - t * 15)
+y_ref.extend(np.full_like(t, 15))
+
+# 转换为numpy数组
+x_ref = np.array(x_ref)
+y_ref = np.array(y_ref)
 # 绘制参考轨迹（固定的）
-x_ref = np.linspace(-10, 50, 200)  # 延长参考轨迹显示范围
-y_ref = np.zeros_like(x_ref)
+
 ax1.plot(x_ref, y_ref, 'r--', label='Reference Path')
 ax1.grid(True)
 ax1.set_xlabel('X (m)')
 ax1.set_ylabel('Y (m)')
 ax1.set_title('Vehicle Trajectory')
 ax1.axis('equal')
-ax1.set_xlim(-12, 52)  # 调整显示范围
-ax1.set_ylim(-4, 4)
+ax1.set_xlim(-15, 15)
+ax1.set_ylim(-5, 20)
 
 # 初始化动态线条
 line_traj, = ax1.plot([], [], 'b-', label='Actual Trajectory')

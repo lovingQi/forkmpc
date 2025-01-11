@@ -11,9 +11,9 @@ MPCController::MPCController(double dt, double L, int pred_horizon,
     
     // 初始化权重矩阵
     Q_ = Eigen::MatrixXd::Identity(3, 3);
-    Q_(0,0) = 50.0;    // x位置权重
-    Q_(1,1) = 50.0;    // y位置权重
-    Q_(2,2) = 20.0;    // 航向角权重
+    Q_(0,0) = 1000.0;    // x位置权重
+    Q_(1,1) = 1000.0;    // y位置权重
+    Q_(2,2) = 250.0;    // 航向角权重
     
     R_ = Eigen::MatrixXd::Identity(2, 2);
     R_(0,0) = 1.0;    // 转向权重
