@@ -1,19 +1,23 @@
+# 忽略构建目录
 build/
+
+# 忽略编译生成的文件
 *.o
 *.obj
+
+# 忽略库文件
 *.lib
-*.exp
-*.ilk
+*.dll
+
+# 忽略调试文件
 *.pdb
+*.ilk
+*.exp
+
+# 忽略日志和文本文件
 *.log
 *.txt
+
+# 忽略可执行文件
 *.exe
-*.dll
-*.lib
-*.exp
-*.ilk
-*.pdb
-*.log
-*.txt
-*.exe
-*.dll
+
