@@ -24,7 +24,7 @@ y = df['y'].to_numpy()
 theta = df['theta'].to_numpy()
 speed = df['speed'].to_numpy()
 steer = df['steer'].to_numpy()
-time = np.arange(len(df)) * 0.1
+time = np.arange(len(df)) * 0.03
 def cubic_bezier(p0, p1, p2, p3, t):
     t2 = t * t
     t3 = t2 * t
@@ -34,7 +34,7 @@ def cubic_bezier(p0, p1, p2, p3, t):
     return p0 * mt3 + p1 * (3 * mt2 * t) + p2 * (3 * mt * t2) + p3 * t3
 
 # 生成参考路径点
-density = 500
+density = 167
 x_ref = []
 y_ref = []
 
@@ -246,7 +246,7 @@ def update(frame):
     closest_idx = np.argmin(distances)
     
     # 计算预瞄点（基于当前速度）
-    preview_dist = 0.05 + 0.05 * abs(speed[frame])  # 修改为与C++相同的参数
+    preview_dist = 0.06+ 0.045 * abs(speed[frame])  # 修改为与C++相同的参数
     preview_idx = closest_idx
     accumulated_dist = 0.0
     while preview_idx < len(x_ref) - 1 and accumulated_dist < preview_dist:
@@ -342,8 +342,8 @@ def update(frame):
 
 # 创建动画，降低interval使动画更流畅
 anim = FuncAnimation(fig, update, frames=len(df), 
-                    init_func=init, interval=20,  # 20ms per frame
-                    blit=False, repeat=True)  # 允许重复播放
+                    init_func=init, interval=5,  # 从20ms改为5ms
+                    blit=False, repeat=True)
 
 plt.tight_layout()  # 调整子图间距
 plt.show() 

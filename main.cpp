@@ -23,7 +23,7 @@ std::vector<Eigen::VectorXd> generateReferencePath() {
     std::vector<Eigen::Vector2d> points;
     
     // 路径点密度
-    const int density = 500;  // 每段曲线的采样点数
+    const int density = 167;  // 每段曲线的采样点数
     
     // 第一段：直线
     for(int i = 0; i < density; i++) {
@@ -99,7 +99,7 @@ std::vector<Eigen::VectorXd> generateReferencePath() {
 // 修改找最近点的函数，增加预瞄距离
 int findClosestPoint(const Eigen::VectorXd& current_state, 
                     const std::vector<Eigen::VectorXd>& reference_path,
-                    double preview_distance = 0.5) {  // 减小这个默认值，比如改为0.5
+                    double preview_distance = 1) {  // 减小这个默认值，比如改为0.5
     int closest_idx = 0;
     double min_dist = std::numeric_limits<double>::max();
     
@@ -132,8 +132,8 @@ int findClosestPoint(const Eigen::VectorXd& current_state,
 
 // 修改预瞄距离计算
 double getPreviewDistance(double velocity) {
-    const double base_preview = 0.5;  // 减小基础预瞄距离，比如改为0.05
-    const double velocity_gain = 0.5; // 减小速度增益，比如改为0.05
+    const double base_preview = 0.06;    // 基础预瞄距离约为最大速度×dt_×2
+    const double velocity_gain = 0.045;   // 速度增益约为dt_×1.5
     return base_preview + velocity_gain * std::abs(velocity);
 }
 
@@ -150,7 +150,7 @@ int main() {
     
     // 3. 设置初始状态和控制
     Eigen::VectorXd current_state(3);
-    current_state << -12.0, 2.0, -M_PI/4;  // 增大初始横向偏差到3米
+    current_state << -12.0, -2.0, M_PI/4;  // 增大初始横向偏差到3米
     
     Eigen::VectorXd last_control(2);
     last_control << 0.0, 0.0;  // 初始速度和转向角都为0
@@ -190,7 +190,7 @@ int main() {
                         << control(1) << "\n";
         
         // 更新状态（简单欧拉积分）
-        double dt = 0.1;  // 与MPC中的dt保持一致
+        double dt = 0.03;  // 改为与MPC中的dt_一致
         double v = control(0);
         double delta = control(1);
         double phi = current_state(2);
