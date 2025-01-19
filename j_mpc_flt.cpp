@@ -244,19 +244,19 @@ Eigen::VectorXd JMpcFlt::solve(
         }
     }
     
-    // 计算参考线方向
-    double dx = reference_path[closest_idx+1](0) - reference_path[closest_idx](0);
-    double dy = reference_path[closest_idx+1](1) - reference_path[closest_idx](1);
-    double path_angle = std::atan2(dy, dx);
+    // // 计算参考线方向
+    // double dx = reference_path[closest_idx+1](0) - reference_path[closest_idx](0);
+    // double dy = reference_path[closest_idx+1](1) - reference_path[closest_idx](1);
+    // double path_angle = std::atan2(dy, dx);
     
-    // 计算车辆位置到参考线的垂直距离(横向误差)
-    double lateral_error = std::abs((current_state(1) - reference_path[closest_idx](1)) * std::cos(path_angle) - 
-                                  (current_state(0) - reference_path[closest_idx](0)) * std::sin(path_angle));
+    // // 计算车辆位置到参考线的垂直距离(横向误差)
+    // double lateral_error = std::abs((current_state(1) - reference_path[closest_idx](1)) * std::cos(path_angle) - 
+    //                               (current_state(0) - reference_path[closest_idx](0)) * std::sin(path_angle));
     
-    // 计算航向误差(车辆朝向与参考线方向的夹角)
-    double heading_error = std::abs(current_state(2) - path_angle);
-    // 归一化到[-pi,pi]
-    heading_error = std::atan2(std::sin(heading_error), std::cos(heading_error));
+    // // 计算航向误差(车辆朝向与参考线方向的夹角)
+    // double heading_error = std::abs(current_state(2) - path_angle);
+    // // 归一化到[-pi,pi]
+    // heading_error = std::atan2(std::sin(heading_error), std::cos(heading_error));
     
     // 参考速度随误差指数衰减
     auto errors = calculateTrackingErrors(current_state, reference_path[closest_idx]);
