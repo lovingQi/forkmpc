@@ -34,7 +34,7 @@ def cubic_bezier(p0, p1, p2, p3, t):
     return p0 * mt3 + p1 * (3 * mt2 * t) + p2 * (3 * mt * t2) + p3 * t3
 
 # 生成参考路径点
-density = 167
+density = 334
 x_ref = []
 y_ref = []
 

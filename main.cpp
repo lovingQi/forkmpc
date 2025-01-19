@@ -23,7 +23,7 @@ std::vector<Eigen::VectorXd> generateReferencePath() {
     std::vector<Eigen::Vector2d> points;
     
     // 路径点密度
-    const int density = 167;  // 每段曲线的采样点数
+    const int density = 334;  // 每段曲线的采样点数
     
     // 第一段：直线
     for(int i = 0; i < density; i++) {
