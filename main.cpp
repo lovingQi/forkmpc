@@ -22,59 +22,85 @@ std::vector<Eigen::VectorXd> generateReferencePath() {
     std::vector<Eigen::VectorXd> reference_path;
     std::vector<Eigen::Vector2d> points;
     
-    // 路径点密度
-    const int density = 334;  // 每段曲线的采样点数
+    const double point_interval = 0.03;  // 30mm = 0.03m的点间隔
     
-    // 第一段：直线
+    // 第一段：直线 (-10,0) -> (0,0)
+    double length = 10.0;  // 第一段长度
+    int density = static_cast<int>(length / point_interval);
     for(int i = 0; i < density; i++) {
         double t = static_cast<double>(i) / density;
-        Eigen::Vector2d point(-10 + t * 10, 0);  // 从(-10,0)到(0,0)的直线
+        Eigen::Vector2d point(-10 + t * 10, 0);
         points.push_back(point);
     }
     
-    // 第二段：右转弯（贝塞尔曲线）
+    // 第二段：贝塞尔曲线
     Eigen::Vector2d p0(0, 0);
     Eigen::Vector2d p1(5, 0);
     Eigen::Vector2d p2(10, 2);
     Eigen::Vector2d p3(10, 5);
     
+    // 计算贝塞尔曲线长度（通过采样估算）
+    double bezier_length = 0;
+    const int temp_samples = 1000;
+    Eigen::Vector2d last_point = p0;
+    for(int i = 1; i <= temp_samples; i++) {
+        double t = static_cast<double>(i) / temp_samples;
+        Eigen::Vector2d current_point = cubicBezier(p0, p1, p2, p3, t);
+        bezier_length += (current_point - last_point).norm();
+        last_point = current_point;
+    }
+    
+    // 根据长度计算采样点数
+    density = static_cast<int>(bezier_length / point_interval);
     for(int i = 0; i < density; i++) {
         double t = static_cast<double>(i) / density;
         points.push_back(cubicBezier(p0, p1, p2, p3, t));
     }
     
-    // 第三段：直线
+    // 第三段：直线 (10,5) -> (10,10)
+    length = 5.0;
+    density = static_cast<int>(length / point_interval);
     for(int i = 0; i < density; i++) {
         double t = static_cast<double>(i) / density;
-        Eigen::Vector2d point(10, 5 + t * 5);  // 向上的直线
-        points.push_back(point);
+        points.push_back(Eigen::Vector2d(10, 5 + t * 5));
     }
     
-    // 第四段：左转弯
+    // 第四段：贝塞尔曲线
     p0 = Eigen::Vector2d(10, 10);
     p1 = Eigen::Vector2d(10, 13);
     p2 = Eigen::Vector2d(8, 15);
     p3 = Eigen::Vector2d(5, 15);
     
+    // 计算第二段贝塞尔曲线长度
+    bezier_length = 0;
+    last_point = p0;
+    for(int i = 1; i <= temp_samples; i++) {
+        double t = static_cast<double>(i) / temp_samples;
+        Eigen::Vector2d current_point = cubicBezier(p0, p1, p2, p3, t);
+        bezier_length += (current_point - last_point).norm();
+        last_point = current_point;
+    }
+    
+    density = static_cast<int>(bezier_length / point_interval);
     for(int i = 0; i < density; i++) {
         double t = static_cast<double>(i) / density;
         points.push_back(cubicBezier(p0, p1, p2, p3, t));
     }
     
-    // 第五段：直线
+    // 第五段：直线 (5,15) -> (-10,15)
+    length = 15.0;
+    density = static_cast<int>(length / point_interval);
     for(int i = 0; i < density; i++) {
         double t = static_cast<double>(i) / density;
-        Eigen::Vector2d point(5 - t * 15, 15);  // 向左的直线
-        points.push_back(point);
+        points.push_back(Eigen::Vector2d(5 - t * 15, 15));
     }
     
-    // 计算路径点的航向角
+    // 计算航向角（保持不变）
     for(size_t i = 0; i < points.size(); i++) {
         Eigen::VectorXd state(3);
         state(0) = points[i].x();
         state(1) = points[i].y();
         
-        // 计算航向角（使用前后点计算切线方向）
         if(i == 0) {
             double dx = points[1].x() - points[0].x();
             double dy = points[1].y() - points[0].y();
@@ -96,6 +122,7 @@ std::vector<Eigen::VectorXd> generateReferencePath() {
     
     return reference_path;
 }
+
 // 修改找最近点的函数，增加预瞄距离
 int findClosestPoint(const Eigen::VectorXd& current_state, 
                     const std::vector<Eigen::VectorXd>& reference_path,

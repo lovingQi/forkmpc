@@ -34,43 +34,71 @@ def cubic_bezier(p0, p1, p2, p3, t):
     return p0 * mt3 + p1 * (3 * mt2 * t) + p2 * (3 * mt * t2) + p3 * t3
 
 # 生成参考路径点
-density = 334
+point_interval = 0.03  # 30mm = 0.03m的点间隔
 x_ref = []
 y_ref = []
 
-# 第一段：直线
+# 第一段：直线 (-10,0) -> (0,0)
+length = 10.0
+density = int(length / point_interval)
 t = np.linspace(0, 1, density)
 x_ref.extend(-10 + t * 10)
 y_ref.extend(np.zeros_like(t))
 
-# 第二段：右转弯（贝塞尔曲线）
+# 第二段：贝塞尔曲线
 p0 = np.array([0, 0])
 p1 = np.array([5, 0])
 p2 = np.array([10, 2])
 p3 = np.array([10, 5])
 
+# 计算贝塞尔曲线长度
+temp_samples = 1000
+bezier_length = 0
+last_point = p0
+for i in range(1, temp_samples + 1):
+    t = i / temp_samples
+    current_point = cubic_bezier(p0, p1, p2, p3, t)
+    bezier_length += np.linalg.norm(current_point - last_point)
+    last_point = current_point
+
+# 根据长度计算采样点数
+density = int(bezier_length / point_interval)
 for t in np.linspace(0, 1, density):
     point = cubic_bezier(p0, p1, p2, p3, t)
     x_ref.append(point[0])
     y_ref.append(point[1])
 
-# 第三段：直线
+# 第三段：直线 (10,5) -> (10,10)
+length = 5.0
+density = int(length / point_interval)
 t = np.linspace(0, 1, density)
 x_ref.extend(np.full_like(t, 10))
 y_ref.extend(5 + t * 5)
 
-# 第四段：左转弯
+# 第四段：贝塞尔曲线
 p0 = np.array([10, 10])
 p1 = np.array([10, 13])
 p2 = np.array([8, 15])
 p3 = np.array([5, 15])
 
+# 计算第二段贝塞尔曲线长度
+bezier_length = 0
+last_point = p0
+for i in range(1, temp_samples + 1):
+    t = i / temp_samples
+    current_point = cubic_bezier(p0, p1, p2, p3, t)
+    bezier_length += np.linalg.norm(current_point - last_point)
+    last_point = current_point
+
+density = int(bezier_length / point_interval)
 for t in np.linspace(0, 1, density):
     point = cubic_bezier(p0, p1, p2, p3, t)
     x_ref.append(point[0])
     y_ref.append(point[1])
 
-# 第五段：直线
+# 第五段：直线 (5,15) -> (-10,15)
+length = 15.0
+density = int(length / point_interval)
 t = np.linspace(0, 1, density)
 x_ref.extend(5 - t * 15)
 y_ref.extend(np.full_like(t, 15))
