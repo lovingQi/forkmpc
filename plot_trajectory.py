@@ -131,9 +131,9 @@ ax1.set_ylim(-5, 20)
 
 # 初始化动态线条
 line_traj, = ax1.plot([], [], 'b-', label='Actual Trajectory')
-point_vehicle, = ax1.plot([], [], 'go', markersize=10, label='Vehicle')
-point_reference, = ax1.plot([], [], 'ro', markersize=8, label='Reference Point')  # 添加参考点
-preview_line, = ax1.plot([], [], 'g--', alpha=0.5, label='Preview Line')  # 添加预瞄线
+point_vehicle, = ax1.plot([], [], 'go', markersize=4, label='Vehicle')
+point_reference, = ax1.plot([], [], 'ro', markersize=4, label='Reference Point')  # 从8改为4
+preview_line, = ax1.plot([], [], 'g--', alpha=0.5, label='Preview Line')
 arrow_vehicle = ax1.arrow(0, 0, 0, 0, head_width=0.1, head_length=0.2, fc='g', ec='g')
 
 line_heading, = ax2.plot([], [], 'g-')
