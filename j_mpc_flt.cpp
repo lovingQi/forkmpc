@@ -245,23 +245,23 @@ Eigen::VectorXd JMpcFlt::solve(
             closest_idx = i;
         }
     }
+    std::cout << "closest_idx :" << closest_idx << std::endl;
     
-    // // 计算参考线方向
-    // double dx = reference_path[closest_idx+1](0) - reference_path[closest_idx](0);
-    // double dy = reference_path[closest_idx+1](1) - reference_path[closest_idx](1);
-    // double path_angle = std::atan2(dy, dx);
-    
-    // // 计算车辆位置到参考线的垂直距离(横向误差)
-    // double lateral_error = std::abs((current_state(1) - reference_path[closest_idx](1)) * std::cos(path_angle) - 
-    //                               (current_state(0) - reference_path[closest_idx](0)) * std::sin(path_angle));
-    
-    // // 计算航向误差(车辆朝向与参考线方向的夹角)
-    // double heading_error = std::abs(current_state(2) - path_angle);
-    // // 归一化到[-pi,pi]
-    // heading_error = std::atan2(std::sin(heading_error), std::cos(heading_error));
-    
-    // 参考速度随误差指数衰减
+    // 打印当前状态和参考状态
+    std::cout << "\nCurrent State: x=" << current_state(0) 
+              << ", y=" << current_state(1) 
+              << ", phi=" << current_state(2) << std::endl;
+              
+    std::cout << "Reference State: x=" << reference_path[closest_idx](0)
+              << ", y=" << reference_path[closest_idx](1)
+              << ", phi=" << reference_path[closest_idx](2) << std::endl;
+              
+    // 打印计算出的误差
     auto errors = calculateTrackingErrors(current_state, reference_path[closest_idx]);
+    std::cout << "Errors: lateral=" << errors.lateral_error 
+              << ", heading=" << errors.heading_error << std::endl;
+              
+    // 参考速度随误差指数衰减
     double v_ref = max_v_ * std::exp(-3 * errors.lateral_error) * std::exp(-0.5 * errors.heading_error);
     v_ref = std::max(0.3 * max_v_, v_ref);  // 保持最小速度为最大速度的10%
     
@@ -301,7 +301,7 @@ Eigen::VectorXd JMpcFlt::solve(
     OSQPSettings* settings = (OSQPSettings*)c_malloc(sizeof(OSQPSettings));
     osqp_set_default_settings(settings);
     settings->alpha = 1.0;
-    settings->verbose = false;
+    settings->verbose = true;
     settings->warm_start = true;
     
     // 5. 设置OSQP数据
@@ -352,6 +352,14 @@ Eigen::VectorXd JMpcFlt::solve(
     // 8. 计算实际控制量
     // control = u_ref(k) + [u(k-1) - u_ref(k-1)] + delta_u(k)
     Eigen::VectorXd control = reference_controls[0] + (last_control - last_reference_control_) + delta_u;
+    
+    // 打印计算出的参考控制量
+    std::cout << "Reference Control: v=" << reference_controls[0](0)
+              << ", delta=" << reference_controls[0](1) << std::endl;
+              
+    // 打印delta_u和最终控制量
+    std::cout << "Delta_u: " << delta_u.transpose() << std::endl;
+    std::cout << "Final Control: " << control.transpose() << std::endl;
     
     // 更新上一时刻的参考控制量
     last_reference_control_ = reference_controls[0];
