@@ -85,5 +85,7 @@ private:
     TrackingErrors calculateTrackingErrors(
         const Eigen::VectorXd& current_state,
         const Eigen::VectorXd& reference_state);
+    
+    Eigen::VectorXd last_reference_control_;  // 存储上一时刻的参考控制量
 };
 #endif // J_MPC_FLT_H

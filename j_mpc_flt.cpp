@@ -18,6 +18,8 @@ JMpcFlt::JMpcFlt() {
     R_ = Eigen::MatrixXd::Identity(CONTROL_DIM, CONTROL_DIM);
     R_(0,0) = 2.0;     // 速度增量权重
     R_(1,1) = 1.0;     // 转向角增量权重
+    
+    last_reference_control_ = Eigen::VectorXd::Zero(CONTROL_DIM);
 }
 
 void JMpcFlt::linearizeModel(
@@ -348,7 +350,11 @@ Eigen::VectorXd JMpcFlt::solve(
     delta_u << work->solution->x[0], work->solution->x[1];
     
     // 8. 计算实际控制量
-    Eigen::VectorXd control = last_control + delta_u;
+    // control = u_ref(k) + [u(k-1) - u_ref(k-1)] + delta_u(k)
+    Eigen::VectorXd control = reference_controls[0] + (last_control - last_reference_control_) + delta_u;
+    
+    // 更新上一时刻的参考控制量
+    last_reference_control_ = reference_controls[0];
     
     // 9. 清理内存
     osqp_cleanup(work);
