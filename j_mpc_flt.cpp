@@ -143,8 +143,8 @@ void JMpcFlt::buildQPProblem(
     
     g = Eigen::VectorXd::Zero(n_du + 1);
     //g.head(n_du) = Theta.transpose() * Q_bar * (Psi * xi_0 - Y_ref);
-    g.head(n_du) = 2*(Psi * xi_0).transpose() * Q_bar * Theta;
-    
+    //g.head(n_du) = 2*(Psi * xi_0).transpose() * Q_bar * Theta;
+    g.head(n_du) = Theta.transpose() * Q_bar * Psi * xi_0;  // 去掉2倍系数，保持原来的矩阵乘法顺序
     // 3. 构建约束矩阵A
     // 构建控制量累积矩阵
     Eigen::MatrixXd A_du = Eigen::MatrixXd::Zero(n_du, n_du);
