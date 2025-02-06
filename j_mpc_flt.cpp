@@ -134,7 +134,7 @@ void JMpcFlt::buildQPProblem(
     
     // 2. 构建g向量 [G₁]
     Eigen::VectorXd xi_0(AUG_STATE_DIM);
-    xi_0 << current_state, last_control;
+    xi_0 << current_state - reference_path[0], last_control - last_reference_control_;
     
     Eigen::VectorXd Y_ref(STATE_DIM * Np);
     for(int i = 0; i < Np; i++) {
@@ -142,7 +142,8 @@ void JMpcFlt::buildQPProblem(
     }
     
     g = Eigen::VectorXd::Zero(n_du + 1);
-    g.head(n_du) = Theta.transpose() * Q_bar * (Psi * xi_0 - Y_ref);
+    //g.head(n_du) = Theta.transpose() * Q_bar * (Psi * xi_0 - Y_ref);
+    g.head(n_du) = 2*(Psi * xi_0).transpose() * Q_bar * Theta;
     
     // 3. 构建约束矩阵A
     // 构建控制量累积矩阵
