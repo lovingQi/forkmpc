@@ -121,3 +121,7 @@ Y(t) = [η(t+1|t), η(t+2|t), ..., η(t+Np|t)]ᵀ
 min  1/2*ΔUᵀ*H*ΔU + fᵀ*ΔU
 s.t. lb ≤ ΔU ≤ ub
      Ax*ΔU ≤ b
+
+使用方法，直接运行，生成trajectory.csv文件，然后运行plot_trajectory.py文件，生成轨迹图。
+
+[图片]
