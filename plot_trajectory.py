@@ -213,9 +213,11 @@ def draw_forklift(ax, x, y, theta, steer_angle, color='g'):
     if hasattr(draw_forklift, 'wheel'):
         draw_forklift.wheel.remove()
     
+    # 修改前轮和后轮的尺寸参数
+    wheel_length = 0.4   # 从0.2增加到0.4
+    wheel_width = 0.15   # 从0.08增加到0.15
+
     # 前轮形状
-    wheel_length = 0.2
-    wheel_width = 0.08
     wheel_corners = np.array([
         [-wheel_length/2, -wheel_width/2],
         [wheel_length/2, -wheel_width/2],
@@ -232,7 +234,12 @@ def draw_forklift(ax, x, y, theta, steer_angle, color='g'):
     wheel_corners = np.dot(wheel_corners, wheel_rot.T)
     wheel_corners = wheel_corners + np.array([front_x, front_y])
     
-    draw_forklift.wheel = patches.Polygon(wheel_corners, color='blue', alpha=0.8)
+    draw_forklift.wheel = patches.Polygon(wheel_corners, 
+        color='blue', 
+        alpha=1.0,        # 从0.8增加到1.0
+        ec='black',       # 添加黑色边框
+        linewidth=1.5     # 设置边框宽度
+    )
     ax.add_patch(draw_forklift.wheel)
     
     # 绘制后轮
@@ -249,7 +256,12 @@ def draw_forklift(ax, x, y, theta, steer_angle, color='g'):
     rear_wheel_corners = np.dot(rear_wheel_corners, rot.T)
     rear_wheel_corners = rear_wheel_corners + rear_pos
     
-    draw_forklift.rear_wheel = patches.Polygon(rear_wheel_corners, color='black', alpha=0.8)
+    draw_forklift.rear_wheel = patches.Polygon(rear_wheel_corners, 
+        color='black', 
+        alpha=1.0,        # 从0.8增加到1.0
+        ec='black',       # 添加黑色边框
+        linewidth=1.5     # 设置边框宽度
+    )
     ax.add_patch(draw_forklift.rear_wheel)
 
 def init():
