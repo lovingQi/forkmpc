@@ -116,7 +116,13 @@ std::vector<Eigen::VectorXd> generateReferencePath() {
             double dy = points[i+1].y() - points[i-1].y();
             state(2) = std::atan2(dy, dx);
         }
-        
+        state(2) = state(2) + M_PI;
+        if(state(2) > M_PI) {
+            state(2) -= 2*M_PI;
+        }
+        else if(state(2) < -M_PI) {
+            state(2) += 2*M_PI;
+        }
         reference_path.push_back(state);
     }
     
@@ -177,7 +183,7 @@ int main() {
     
     // 3. 设置初始状态和控制
     Eigen::VectorXd current_state(3);
-    current_state << -12.0, -2.0, M_PI/4;  // 增大初始横向偏差到3米
+    current_state << -12, -2, -3*M_PI/4;  // 增大初始横向偏差到3米
     
     Eigen::VectorXd last_control(2);
     last_control << 0.0, 0.0;  // 初始速度和转向角都为0

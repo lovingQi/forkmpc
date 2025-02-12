@@ -4,20 +4,20 @@
 JMpcFlt::JMpcFlt() {
     // 初始化系统参数
     dt_ = 0.03;         
-    max_delta_ = 0.436;  // 25度，根据图片中的约束
+    max_delta_ = 0.785;  // 25度，根据图片中的约束
     L_ = 0.97;         
-    max_v_ = 1.0;     
+    max_v_ = 0.7;     
     rho_ = 1e3;       
     
     // 调整权重矩阵
     Q_ = Eigen::MatrixXd::Identity(STATE_DIM, STATE_DIM);
     Q_(0,0) = 12000.0;    // x位置误差
     Q_(1,1) = 12000.0;    // y位置误差
-    Q_(2,2) = 500.0;    // 航向角误差权重
+    Q_(2,2) = 350.0;    // 航向角误差权重
     
     R_ = Eigen::MatrixXd::Identity(CONTROL_DIM, CONTROL_DIM);
-    R_(0,0) = 2.0;     // 速度增量权重
-    R_(1,1) = 1.0;     // 转向角增量权重
+    R_(0,0) = 200.0;     // 速度增量权重
+    R_(1,1) = 1000.0;     // 转向角增量权重
     
     last_reference_control_ = Eigen::VectorXd::Zero(CONTROL_DIM);
 }
@@ -134,7 +134,17 @@ void JMpcFlt::buildQPProblem(
     
     // 2. 构建g向量 [G₁]
     Eigen::VectorXd xi_0(AUG_STATE_DIM);
-    xi_0 << current_state - reference_path[0], last_control - last_reference_control_;
+    Eigen::VectorXd state_error = current_state - reference_path[0];
+    if(state_error(2) > M_PI)
+    {
+        state_error(2) -= 2*M_PI;
+    }
+    else if(state_error(2) < -M_PI)
+    {
+        state_error(2) += 2*M_PI;
+    }
+
+    xi_0 << state_error, last_control - last_reference_control_;
     
     Eigen::VectorXd Y_ref(STATE_DIM * Np);
     for(int i = 0; i < Np; i++) {
@@ -188,7 +198,12 @@ void JMpcFlt::buildQPProblem(
         
         // 考虑当前状态调整约束
         auto errors = calculateTrackingErrors(current_state, reference_path[i]);
-        u_ub(0) = v_max * std::exp(-3 * errors.lateral_error) * std::exp(-0.5 * errors.heading_error);
+        // 计算速度上限范围:
+        // v_max = 0.7 m/s
+        // lateral_error 和 heading_error 都在[0,1]范围内
+        // 当误差为0时: 0.7 * exp(0) * exp(0) = 0.7 m/s
+        // 当误差最大时: 0.7 * exp(-1.5) * exp(-0.25) = 0.7 * 0.223 * 0.779 = 0.3 m/s
+        u_ub(0) = v_max * std::exp(-1.5 * errors.lateral_error) * std::exp(-0.25 * errors.heading_error);
         u_ub(0) = std::max(0.3, u_ub(0));
         
         // 根据误差调整转向角范围
@@ -235,7 +250,7 @@ Eigen::VectorXd JMpcFlt::solve(
     
     // 根据横向误差和航向误差动态调整参考速度
     // 找到最近的参考点和实际使用的参考点
-    int closest_idx = 0;
+    int closest_idx = 0; 
     double min_dist = std::numeric_limits<double>::max();
     for(int i = 0; i < reference_path.size(); i++) {
         double dx = current_state(0) - reference_path[i](0);
@@ -390,7 +405,12 @@ JMpcFlt::TrackingErrors JMpcFlt::calculateTrackingErrors(
     
     // 计算航向误差并归一化
     double heading_error = std::abs(current_state(2) - path_angle);
-    heading_error = std::atan2(std::sin(heading_error), std::cos(heading_error));
+    if(heading_error > M_PI) {
+        heading_error -= 2*M_PI;
+    } else if(heading_error < -M_PI) {
+        heading_error += 2*M_PI;
+    }
+    //heading_error = std::atan2(std::sin(heading_error), std::cos(heading_error));
     heading_error = std::min(std::abs(heading_error) / M_PI, 1.0);  // 归一化到[0,1]
     
     return {lateral_error, heading_error};
