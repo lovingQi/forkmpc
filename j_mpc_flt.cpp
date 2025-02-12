@@ -205,7 +205,8 @@ void JMpcFlt::buildQPProblem(
         // 当误差最大时: 0.7 * exp(-1.5) * exp(-0.25) = 0.7 * 0.223 * 0.779 = 0.3 m/s
         u_ub(0) = v_max * std::exp(-1.5 * errors.lateral_error) * std::exp(-0.25 * errors.heading_error);
         u_ub(0) = std::max(0.3, u_ub(0));
-        
+        u_lb(0) = v_min * std::exp(-1.5 * errors.lateral_error) * std::exp(-0.25 * errors.heading_error);
+        u_lb(0) = std::min(-0.3, u_lb(0));
         // 根据误差调整转向角范围
         double delta_range = delta_max * (0.6 + 0.2 * errors.lateral_error + 0.2 * errors.heading_error);
         delta_range = std::min(delta_range, delta_max);  // 确保不超过最大转向角
@@ -278,12 +279,21 @@ Eigen::VectorXd JMpcFlt::solve(
               << ", heading=" << errors.heading_error << std::endl;
               
     // 参考速度随误差指数衰减
-    double v_ref = max_v_ * std::exp(-3 * errors.lateral_error) * std::exp(-0.5 * errors.heading_error);
-    v_ref = std::max(0.3 * max_v_, v_ref);  // 保持最小速度为最大速度的10%
+    double v_ref = -max_v_ * std::exp(-3 * errors.lateral_error) * std::exp(-0.5 * errors.heading_error);
+    v_ref = std::min(-0.3 * max_v_, v_ref);  // 保持最小速度为最大速度的10%
     
     for(int i = 0; i < Np-1; i++) {
         double dphi = reference_path[i+1](2) - reference_path[i](2);
         double delta_ref = atan2(dphi * L_, v_ref * dt_);
+        delta_ref = delta_ref+M_PI;
+        if(delta_ref > M_PI)
+        {
+            delta_ref -= 2*M_PI;
+        }
+        else if(delta_ref < -M_PI)
+        {
+            delta_ref += 2*M_PI;
+        }
         
         Eigen::VectorXd ref_u(CONTROL_DIM);
         ref_u << v_ref, delta_ref;

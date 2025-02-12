@@ -16,8 +16,8 @@ public:
     static const int STATE_DIM = 3;     // [x, y, phi]
     static const int CONTROL_DIM = 2;   // [v, delta]
     static const int AUG_STATE_DIM = STATE_DIM + CONTROL_DIM;  // 增广状态维度
-    static const int Np = 10;           // 预测步数
-    static const int Nc = 9;           // 控制步数
+    static const int Np = 20;           // 预测步数
+    static const int Nc = 19;           // 控制步数
     
     // 主要接口
     Eigen::VectorXd solve(const Eigen::VectorXd& current_state,
