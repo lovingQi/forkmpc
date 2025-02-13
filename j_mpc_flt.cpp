@@ -11,12 +11,12 @@ JMpcFlt::JMpcFlt() {
     
     // 调整权重矩阵
     Q_ = Eigen::MatrixXd::Identity(STATE_DIM, STATE_DIM);
-    Q_(0,0) = 12000.0;    // x位置误差
-    Q_(1,1) = 12000.0;    // y位置误差
+    Q_(0,0) = 8000.0;    // x位置误差
+    Q_(1,1) = 8000.0;    // y位置误差
     Q_(2,2) = 350.0;    // 航向角误差权重
     
     R_ = Eigen::MatrixXd::Identity(CONTROL_DIM, CONTROL_DIM);
-    R_(0,0) = 200.0;     // 速度增量权重
+    R_(0,0) = 400.0;     // 速度增量权重
     R_(1,1) = 1000.0;     // 转向角增量权重
     
     last_reference_control_ = Eigen::VectorXd::Zero(CONTROL_DIM);
