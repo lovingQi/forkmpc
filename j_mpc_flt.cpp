@@ -4,7 +4,7 @@
 JMpcFlt::JMpcFlt() {
     // 初始化系统参数
     dt_ = 0.03;         
-    max_delta_ = 0.785;  // 25度，根据图片中的约束
+    max_delta_ = 1.4835;  // 25度，根据图片中的约束
     L_ = 0.97;         
     max_v_ = 0.7;     
     rho_ = 1e3;       
@@ -13,7 +13,7 @@ JMpcFlt::JMpcFlt() {
     Q_ = Eigen::MatrixXd::Identity(STATE_DIM, STATE_DIM);
     Q_(0,0) = 8000.0;    // x位置误差
     Q_(1,1) = 8000.0;    // y位置误差
-    Q_(2,2) = 350.0;    // 航向角误差权重
+    Q_(2,2) = 500.0;    // 航向角误差权重
     
     R_ = Eigen::MatrixXd::Identity(CONTROL_DIM, CONTROL_DIM);
     R_(0,0) = 400.0;     // 速度增量权重
