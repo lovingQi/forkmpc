@@ -171,7 +171,7 @@ def draw_forklift(ax, x, y, theta, steer_angle, color='g'):
     # 车体参数（单位：米）
     length = 1.4     # 车长
     width = 0.6      # 车宽
-    wheelbase = 0.97 # 轴距（后轮到前轮的距离）
+    wheelbase = 1.8792 # 轴距（后轮到前轮的距离）
     rear_overhang = 0.3  # 后悬（后轮到车尾的距离）
     
     # 计算后轮位置（当前x,y是后轮位置）
